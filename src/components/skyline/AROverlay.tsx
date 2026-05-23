@@ -219,65 +219,156 @@ export function AROverlay({
         </div>
       )}
 
-      {projected.map((p) => {
-        const selected = p.b.id === selectedId;
-        const vote = feedback[p.b.id]?.vote;
-        const heightLabel = p.b.heightMeters
-          ? `${Math.round(p.b.heightMeters)}m${p.b.levels ? ` · ${p.b.levels}fl` : ""}`
-          : p.b.levels
-            ? `${p.b.levels} fl`
-            : "—";
-        const distLabel =
-          p.distance > 1000
-            ? `${(p.distance / 1000).toFixed(1)}km`
-            : `${Math.round(p.distance)}m`;
-        const voteClass =
-          vote === "up"
-            ? "ring-1 ring-emerald-400/60"
-            : vote === "down"
-              ? "ring-1 ring-red-400/60 opacity-60"
-              : "";
-        return (
-          <div
-            key={p.b.id}
-            className="absolute flex flex-col items-center"
-            style={{
-              left: `${p.xPct}%`,
-              top: `${p.yPct}%`,
-              transform: `translate(-50%, -50%) scale(${p.scale})`,
-              transformOrigin: "center",
-            }}
-          >
-            <button
-              type="button"
-              onClick={(e) => {
-                e.stopPropagation();
-                onSelect(p.b);
+      {(() => {
+        // Build clusters: any labels whose screen position is close enough
+        // they would visually overlap. Uses xPct (bearing) + yPct (elevation).
+        const X_TOL = 14; // % of screen width
+        const Y_TOL = 9;  // % of screen height
+        const clusterIdOf = new Map<string, number>();
+        const clusters: string[][] = [];
+        for (const p of projected) {
+          let found = -1;
+          for (let i = 0; i < clusters.length; i++) {
+            if (
+              clusters[i].some((id) => {
+                const q = projected.find((x) => x.b.id === id);
+                return (
+                  q &&
+                  Math.abs(q.xPct - p.xPct) < X_TOL &&
+                  Math.abs(q.yPct - p.yPct) < Y_TOL
+                );
+              })
+            ) {
+              found = i;
+              break;
+            }
+          }
+          if (found === -1) {
+            clusters.push([p.b.id]);
+            clusterIdOf.set(p.b.id, clusters.length - 1);
+          } else {
+            clusters[found].push(p.b.id);
+            clusterIdOf.set(p.b.id, found);
+          }
+        }
+
+        const selectedCluster =
+          selectedId != null ? clusterIdOf.get(selectedId) ?? -1 : -1;
+
+        return projected.map((p) => {
+          const selected = p.b.id === selectedId;
+          const cIdx = clusterIdOf.get(p.b.id) ?? -1;
+          const siblings = cIdx >= 0 ? clusters[cIdx] : [p.b.id];
+          const positionInCluster = siblings.indexOf(p.b.id);
+          const clusterSize = siblings.length;
+
+          // If this label is in the same cluster as the selected one (but
+          // not selected itself), fan it out vertically so it peeks from
+          // behind the selected label and stays tappable.
+          const isPeeking =
+            selectedCluster === cIdx && !selected && clusterSize > 1;
+          const peekOffset = isPeeking
+            ? (positionInCluster - siblings.indexOf(selectedId!)) * 38
+            : 0;
+
+          const vote = feedback[p.b.id]?.vote;
+          const heightLabel = p.b.heightMeters
+            ? `${Math.round(p.b.heightMeters)}m${p.b.levels ? ` · ${p.b.levels}fl` : ""}`
+            : p.b.levels
+              ? `${p.b.levels} fl`
+              : "—";
+          const distLabel =
+            p.distance > 1000
+              ? `${(p.distance / 1000).toFixed(1)}km`
+              : `${Math.round(p.distance)}m`;
+          const voteClass =
+            vote === "up"
+              ? "ring-1 ring-emerald-400/60"
+              : vote === "down"
+                ? "ring-1 ring-red-400/60 opacity-60"
+                : "";
+
+          // Dim non-selected labels that overlap the selected one so the
+          // selected label is clearly readable but neighbours are still
+          // visible and clickable.
+          const dimWhenOverlapped =
+            selectedCluster === cIdx && !selected ? "opacity-70" : "";
+
+          const zClass = selected
+            ? "z-30"
+            : isPeeking
+              ? "z-20"
+              : selectedCluster === cIdx
+                ? "z-10"
+                : "";
+
+          const cycleToNext = () => {
+            if (clusterSize <= 1) return;
+            const myIdx = siblings.indexOf(p.b.id);
+            const nextId = siblings[(myIdx + 1) % clusterSize];
+            const next = projected.find((x) => x.b.id === nextId)?.b;
+            if (next) onSelect(next);
+          };
+
+          return (
+            <div
+              key={p.b.id}
+              className={`absolute flex flex-col items-center ${zClass}`}
+              style={{
+                left: `${p.xPct}%`,
+                top: `${p.yPct}%`,
+                transform: `translate(-50%, calc(-50% + ${peekOffset}px)) scale(${p.scale})`,
+                transformOrigin: "center",
               }}
-              className={`pointer-events-auto hud-pill rounded-full px-2.5 py-1 text-left transition-all ${voteClass} ${
-                selected
-                  ? "ring-2 ring-[var(--hud-accent)] shadow-[0_0_20px_rgba(0,191,255,0.5)] z-10"
-                  : ""
-              }`}
             >
-              <div className="flex items-center gap-1.5">
-                <div
-                  className={`font-display text-xs font-semibold leading-tight whitespace-nowrap ${
-                    selected ? "text-[var(--hud-accent)]" : "text-white"
-                  }`}
-                >
-                  {p.b.name}
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onSelect(p.b);
+                }}
+                className={`pointer-events-auto hud-pill rounded-full px-2.5 py-1 text-left transition-all ${voteClass} ${dimWhenOverlapped} ${
+                  selected
+                    ? "ring-2 ring-[var(--hud-accent)] shadow-[0_0_20px_rgba(0,191,255,0.5)]"
+                    : ""
+                }`}
+              >
+                <div className="flex items-center gap-1.5">
+                  <div
+                    className={`font-display text-xs font-semibold leading-tight whitespace-nowrap ${
+                      selected ? "text-[var(--hud-accent)]" : "text-white"
+                    }`}
+                  >
+                    {p.b.name}
+                  </div>
+                  {vote === "up" && <ThumbsUp className="h-3 w-3 text-emerald-400" />}
+                  {vote === "down" && <ThumbsDown className="h-3 w-3 text-red-400" />}
                 </div>
-                {vote === "up" && <ThumbsUp className="h-3 w-3 text-emerald-400" />}
-                {vote === "down" && <ThumbsDown className="h-3 w-3 text-red-400" />}
-              </div>
-              <div className="font-mono-hud text-[9px] text-white/60 whitespace-nowrap">
-                {heightLabel} · {distLabel}
-              </div>
-            </button>
-          </div>
-        );
-      })}
+                <div className="font-mono-hud text-[9px] text-white/60 whitespace-nowrap">
+                  {heightLabel} · {distLabel}
+                </div>
+              </button>
+
+              {selected && clusterSize > 1 && (
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    cycleToNext();
+                  }}
+                  className="pointer-events-auto mt-1 flex items-center gap-1 rounded-full bg-black/70 px-2 py-0.5 text-[10px] font-mono-hud text-[var(--hud-accent)] ring-1 ring-[var(--hud-accent)]/60 backdrop-blur-sm"
+                  aria-label="Cycle to next overlapping label"
+                >
+                  <span>
+                    {positionInCluster + 1}/{clusterSize}
+                  </span>
+                  <ChevronRight className="h-3 w-3" />
+                </button>
+              )}
+            </div>
+          );
+        });
+      })()}
     </div>
   );
 }
