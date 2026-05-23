@@ -152,7 +152,7 @@ function SkylineARPage() {
     );
   }
 
-  const gpsStuck = !demoMode && (geo.timedOut || (geo.error && !geo.position));
+  const gpsStuck = !demoMode && !!geo.error && !geo.position;
 
   return (
     <main className="fixed inset-0 overflow-hidden bg-black text-white">
