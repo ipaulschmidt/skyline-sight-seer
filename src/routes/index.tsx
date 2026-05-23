@@ -464,6 +464,17 @@ function SkylineARPage() {
         />
       )}
 
+      {showFovCalibration && !demoMode && (
+        <FOVCalibration
+          heading={heading}
+          onComplete={(derived) => {
+            setFovDeg(derived);
+            setShowFovCalibration(false);
+          }}
+          onCancel={() => setShowFovCalibration(false)}
+        />
+      )}
+
       <BuildingInfoSheet building={selected} onClose={() => setSelected(null)} />
     </main>
   );
