@@ -2,7 +2,8 @@ import { useEffect, useState } from "react";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import type { BuildingFeature } from "@/lib/overpass";
 import { fetchWikipediaSummary, type WikiSummary } from "@/lib/wikipedia";
-import { ExternalLink } from "lucide-react";
+import { ExternalLink, ThumbsUp, ThumbsDown } from "lucide-react";
+import { getFeedback, setFeedback, type Vote } from "@/lib/feedback";
 
 interface Props {
   building: BuildingFeature | null;
@@ -12,17 +13,26 @@ interface Props {
 export function BuildingInfoSheet({ building, onClose }: Props) {
   const [summary, setSummary] = useState<WikiSummary | null>(null);
   const [loading, setLoading] = useState(false);
+  const [vote, setVote] = useState<Vote | null>(null);
 
   useEffect(() => {
     if (!building) return;
     const ac = new AbortController();
     setSummary(null);
     setLoading(true);
+    setVote(getFeedback(building.id)?.vote ?? null);
     fetchWikipediaSummary(building.name, ac.signal)
       .then((s) => setSummary(s))
       .finally(() => setLoading(false));
     return () => ac.abort();
   }, [building]);
+
+  const castVote = (v: Vote) => {
+    if (!building) return;
+    const entry = setFeedback(building.id, v);
+    // setFeedback toggles off when same vote is pressed twice (returns ts:0)
+    setVote(entry.ts === 0 ? null : v);
+  };
 
   return (
     <Sheet open={!!building} onOpenChange={(o) => !o && onClose()}>
@@ -78,12 +88,43 @@ export function BuildingInfoSheet({ building, onClose }: Props) {
           )}
         </div>
 
+        {/* Accuracy feedback */}
+        <div className="mt-6 flex items-center justify-between gap-3 rounded-2xl border border-white/10 bg-white/5 p-3">
+          <div className="font-mono-hud text-[10px] uppercase text-white/60">
+            Is this label correct?
+          </div>
+          <div className="flex gap-2">
+            <button
+              onClick={() => castVote("up")}
+              className={`flex items-center gap-1.5 rounded-full px-3 py-1.5 font-mono-hud text-[10px] uppercase transition ${
+                vote === "up"
+                  ? "bg-emerald-400/20 text-emerald-300 ring-1 ring-emerald-400/50"
+                  : "bg-white/5 text-white/70 hover:bg-white/10"
+              }`}
+              aria-pressed={vote === "up"}
+            >
+              <ThumbsUp className="h-3.5 w-3.5" /> Accurate
+            </button>
+            <button
+              onClick={() => castVote("down")}
+              className={`flex items-center gap-1.5 rounded-full px-3 py-1.5 font-mono-hud text-[10px] uppercase transition ${
+                vote === "down"
+                  ? "bg-red-400/20 text-red-300 ring-1 ring-red-400/50"
+                  : "bg-white/5 text-white/70 hover:bg-white/10"
+              }`}
+              aria-pressed={vote === "down"}
+            >
+              <ThumbsDown className="h-3.5 w-3.5" /> Wrong
+            </button>
+          </div>
+        </div>
+
         {summary?.url && (
           <a
             href={summary.url}
             target="_blank"
             rel="noopener noreferrer"
-            className="mt-6 inline-flex items-center gap-2 rounded-full border border-[var(--hud-accent)]/40 bg-[var(--hud-accent)]/10 px-4 py-2 font-mono-hud text-xs uppercase text-[var(--hud-accent)] transition hover:bg-[var(--hud-accent)]/20"
+            className="mt-4 inline-flex items-center gap-2 rounded-full border border-[var(--hud-accent)]/40 bg-[var(--hud-accent)]/10 px-4 py-2 font-mono-hud text-xs uppercase text-[var(--hud-accent)] transition hover:bg-[var(--hud-accent)]/20"
           >
             Read more on Wikipedia <ExternalLink className="h-3 w-3" />
           </a>

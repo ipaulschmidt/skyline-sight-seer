@@ -12,11 +12,11 @@ import {
   type LoadStatus,
 } from "@/lib/overpass";
 import type { LatLng } from "@/lib/geo";
-import { AROverlay } from "@/components/skyline/AROverlay";
+import { AROverlay, pickBuildingAtBearing } from "@/components/skyline/AROverlay";
 import { CompassHUD } from "@/components/skyline/CompassHUD";
 import { BuildingInfoSheet } from "@/components/skyline/BuildingInfoSheet";
 import { PermissionGate } from "@/components/skyline/PermissionGate";
-import { Loader2, Smartphone, RotateCw, Download, MapPin, CheckCircle2, RefreshCw } from "lucide-react";
+import { Loader2, Smartphone, RotateCw, Download, MapPin, CheckCircle2, RefreshCw, ZoomIn, ZoomOut, Crosshair } from "lucide-react";
 
 export const Route = createFileRoute("/")({
   component: SkylineARPage,
@@ -34,6 +34,8 @@ function SkylineARPage() {
   const [demoHeading, setDemoHeading] = useState(180);
   const [selected, setSelected] = useState<BuildingFeature | null>(null);
   const [showCityPicker, setShowCityPicker] = useState(false);
+  const [zoom, setZoom] = useState(1); // 1x .. 3x; narrows FOV and scales video
+  const [tapMode, setTapMode] = useState(false);
 
   const mobile = useMemo(isMobile, []);
 
@@ -95,17 +97,22 @@ function SkylineARPage() {
 
   return (
     <main className="fixed inset-0 overflow-hidden bg-black text-white">
-      {/* Camera feed */}
+      {/* Camera feed (digital zoom via CSS transform) */}
       {!demoMode && (
         <video
           ref={videoRef}
           autoPlay
           playsInline
           muted
-          className="absolute inset-0 h-full w-full object-cover"
+          className="absolute inset-0 h-full w-full object-cover transition-transform duration-200"
+          style={{ transform: `scale(${zoom})`, transformOrigin: "center center" }}
         />
       )}
-      {demoMode && <DemoBackdrop />}
+      {demoMode && (
+        <div style={{ transform: `scale(${zoom})`, transformOrigin: "center center" }} className="absolute inset-0 transition-transform duration-200">
+          <DemoBackdrop />
+        </div>
+      )}
 
       {/* Vignette */}
       <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_at_center,transparent_40%,rgba(0,0,0,0.7)_100%)]" />
@@ -167,9 +174,66 @@ function SkylineARPage() {
           user={userPos}
           heading={heading}
           buildings={buildings}
+          fovDeg={60 / zoom}
           selectedId={selected?.id ?? null}
           onSelect={(b) => setSelected(b)}
+          onTapBearing={
+            tapMode
+              ? (offset) => {
+                  const hit = pickBuildingAtBearing(
+                    userPos,
+                    heading,
+                    offset,
+                    buildings,
+                    Math.max(2, (60 / zoom) * 0.08),
+                  );
+                  if (hit) setSelected(hit);
+                  setTapMode(false);
+                }
+              : undefined
+          }
         />
+      )}
+
+      {/* Zoom + tap-to-label HUD (right side) */}
+      {userPos && heading != null && (
+        <div className="absolute right-4 top-1/2 z-20 flex -translate-y-1/2 flex-col gap-2">
+          <button
+            onClick={() => setZoom((z) => Math.min(3, +(z + 0.5).toFixed(1)))}
+            disabled={zoom >= 3}
+            className="hud-pill flex h-10 w-10 items-center justify-center rounded-full disabled:opacity-30"
+            aria-label="Zoom in"
+          >
+            <ZoomIn className="h-4 w-4" />
+          </button>
+          <div className="hud-pill rounded-full px-2 py-1 text-center font-mono-hud text-[10px] text-[var(--hud-accent)]">
+            {zoom.toFixed(1)}×
+          </div>
+          <button
+            onClick={() => setZoom((z) => Math.max(1, +(z - 0.5).toFixed(1)))}
+            disabled={zoom <= 1}
+            className="hud-pill flex h-10 w-10 items-center justify-center rounded-full disabled:opacity-30"
+            aria-label="Zoom out"
+          >
+            <ZoomOut className="h-4 w-4" />
+          </button>
+          <button
+            onClick={() => setTapMode((t) => !t)}
+            className={`hud-pill mt-2 flex h-10 w-10 items-center justify-center rounded-full ${
+              tapMode ? "ring-2 ring-[var(--hud-accent)] text-[var(--hud-accent)]" : ""
+            }`}
+            aria-label="Tap to label"
+            aria-pressed={tapMode}
+          >
+            <Crosshair className="h-4 w-4" />
+          </button>
+        </div>
+      )}
+
+      {tapMode && (
+        <div className="pointer-events-none absolute left-1/2 top-24 z-10 -translate-x-1/2 hud-pill rounded-full px-3 py-1.5 font-mono-hud text-[10px] uppercase text-[var(--hud-accent)]">
+          Tap the building you want to identify
+        </div>
       )}
 
       {/* Empty / error */}
