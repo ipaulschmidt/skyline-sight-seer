@@ -1,7 +1,11 @@
 import { useMemo, useRef } from "react";
 import { angularDelta, bearingDeg, distanceMeters, type LatLng } from "@/lib/geo";
 import type { BuildingFeature } from "@/lib/overpass";
-import { getAllFeedback } from "@/lib/feedback";
+import {
+  getAllFeedback,
+  scoreMultiplierFor,
+  correctionBoostFor,
+} from "@/lib/feedback";
 import { loadFovDegrees } from "./FOVCalibration";
 import { ThumbsUp, ThumbsDown } from "lucide-react";
 
