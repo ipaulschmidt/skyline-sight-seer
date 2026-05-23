@@ -16,7 +16,13 @@ import { AROverlay, pickBuildingAtBearing } from "@/components/skyline/AROverlay
 import { CompassHUD } from "@/components/skyline/CompassHUD";
 import { BuildingInfoSheet } from "@/components/skyline/BuildingInfoSheet";
 import { PermissionGate } from "@/components/skyline/PermissionGate";
-import { Loader2, Smartphone, RotateCw, Download, MapPin, CheckCircle2, RefreshCw, ZoomIn, ZoomOut, Crosshair } from "lucide-react";
+import {
+  CompassCalibration,
+  loadCompassOffset,
+  saveCompassOffset,
+  applyCompassOffset,
+} from "@/components/skyline/CompassCalibration";
+import { Loader2, Smartphone, RotateCw, Download, MapPin, CheckCircle2, RefreshCw, ZoomIn, ZoomOut, Crosshair, Compass } from "lucide-react";
 
 export const Route = createFileRoute("/")({
   component: SkylineARPage,
@@ -37,6 +43,9 @@ function SkylineARPage() {
   const [zoom, setZoom] = useState(1); // 1x .. 3x; narrows FOV and scales video
   const [tapMode, setTapMode] = useState(false);
   const [tapMiss, setTapMiss] = useState<number | null>(null); // timestamp of last miss
+  const [compassOffset, setCompassOffset] = useState(0);
+  const [showCalibration, setShowCalibration] = useState(false);
+  const [calibratedThisSession, setCalibratedThisSession] = useState(false);
 
   const mobile = useMemo(isMobile, []);
 
@@ -45,7 +54,24 @@ function SkylineARPage() {
   const geo = useGeolocation(started && !demoMode);
 
   const userPos = demoMode ? demoCity : geo.position;
-  const heading = demoMode ? demoHeading : orientation.heading;
+  const rawHeading = demoMode ? demoHeading : orientation.heading;
+  // Apply calibration offset (skip in demo mode — slider is the source of truth).
+  const heading = demoMode ? rawHeading : applyCompassOffset(rawHeading, compassOffset);
+
+  // Load saved offset on mount
+  useEffect(() => {
+    setCompassOffset(loadCompassOffset());
+  }, []);
+
+  // First-time calibration: when heading first becomes available on mobile and
+  // we have no prior calibration this session, prompt the user.
+  useEffect(() => {
+    if (demoMode || calibratedThisSession) return;
+    if (orientation.heading == null) return;
+    // Only auto-open if user has never calibrated before
+    const hasPrior = typeof window !== "undefined" && window.localStorage.getItem("skyline.compass.offset") !== null;
+    if (!hasPrior) setShowCalibration(true);
+  }, [orientation.heading, demoMode, calibratedThisSession]);
 
   const handleStart = async () => {
     setStarted(true);
@@ -235,6 +261,18 @@ function SkylineARPage() {
           >
             <Crosshair className="h-4 w-4" />
           </button>
+          {!demoMode && (
+            <button
+              onClick={() => setShowCalibration(true)}
+              className={`hud-pill flex h-10 w-10 items-center justify-center rounded-full ${
+                compassOffset !== 0 ? "text-[var(--hud-accent)]" : ""
+              }`}
+              aria-label="Recalibrate compass"
+              title={compassOffset !== 0 ? `Offset ${compassOffset > 0 ? "+" : ""}${compassOffset}°` : "Calibrate compass"}
+            >
+              <Compass className="h-4 w-4" />
+            </button>
+          )}
         </div>
       )}
 
@@ -305,6 +343,23 @@ function SkylineARPage() {
         <CityPicker
           onPick={pickCity}
           onClose={() => setShowCityPicker(false)}
+        />
+      )}
+
+      {showCalibration && !demoMode && (
+        <CompassCalibration
+          heading={orientation.heading}
+          initialOffset={compassOffset}
+          onComplete={(offset) => {
+            setCompassOffset(offset);
+            saveCompassOffset(offset);
+            setShowCalibration(false);
+            setCalibratedThisSession(true);
+          }}
+          onCancel={() => {
+            setShowCalibration(false);
+            setCalibratedThisSession(true);
+          }}
         />
       )}
 
