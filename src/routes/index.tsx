@@ -346,6 +346,23 @@ function SkylineARPage() {
         />
       )}
 
+      {showCalibration && !demoMode && (
+        <CompassCalibration
+          heading={orientation.heading}
+          initialOffset={compassOffset}
+          onComplete={(offset) => {
+            setCompassOffset(offset);
+            saveCompassOffset(offset);
+            setShowCalibration(false);
+            setCalibratedThisSession(true);
+          }}
+          onCancel={() => {
+            setShowCalibration(false);
+            setCalibratedThisSession(true);
+          }}
+        />
+      )}
+
       <BuildingInfoSheet building={selected} onClose={() => setSelected(null)} />
     </main>
   );
