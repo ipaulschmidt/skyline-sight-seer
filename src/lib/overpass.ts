@@ -88,11 +88,24 @@ export function listCachedPacks(): { key: string; pack: CachedPack }[] {
 }
 
 function buildQuery(user: LatLng, radiusMeters: number): string {
+  // Pull buildings that have ANY identifying tag — name, brand, operator,
+  // an address, or a recognizable use (shop/amenity/tourism/office). This
+  // catches landmarks like "Harley-Davidson Honolulu" that lack a `name`
+  // tag but do have `shop` or `brand`. Falls back to address when needed.
+  const a = `around:${radiusMeters},${user.lat},${user.lng}`;
   return `
     [out:json][timeout:25];
     (
-      way["building"]["name"](around:${radiusMeters},${user.lat},${user.lng});
-      relation["building"]["name"](around:${radiusMeters},${user.lat},${user.lng});
+      way["building"]["name"](${a});
+      relation["building"]["name"](${a});
+      way["building"]["brand"](${a});
+      way["building"]["operator"](${a});
+      way["building"]["shop"](${a});
+      way["building"]["amenity"](${a});
+      way["building"]["tourism"](${a});
+      way["building"]["office"](${a});
+      way["building"]["addr:housename"](${a});
+      way["building"]["addr:housenumber"](${a});
     );
     out center tags;
   `;
