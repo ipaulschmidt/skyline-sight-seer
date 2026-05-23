@@ -1,19 +1,23 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useCamera } from "@/hooks/useCamera";
 import { useDeviceOrientation } from "@/hooks/useDeviceOrientation";
 import { useGeolocation } from "@/hooks/useGeolocation";
 import {
   DEMO_BUILDINGS,
+  DEMO_CITIES,
   DEMO_LOCATION,
-  fetchNearbyBuildings,
+  loadAreaPack,
+  readPack,
   type BuildingFeature,
+  type LoadStatus,
 } from "@/lib/overpass";
+import type { LatLng } from "@/lib/geo";
 import { AROverlay } from "@/components/skyline/AROverlay";
 import { CompassHUD } from "@/components/skyline/CompassHUD";
 import { BuildingInfoSheet } from "@/components/skyline/BuildingInfoSheet";
 import { PermissionGate } from "@/components/skyline/PermissionGate";
-import { Loader2, Smartphone, RotateCw } from "lucide-react";
+import { Loader2, Smartphone, RotateCw, Download, MapPin, CheckCircle2, RefreshCw } from "lucide-react";
 
 export const Route = createFileRoute("/")({
   component: SkylineARPage,
@@ -27,11 +31,15 @@ function isMobile() {
 function SkylineARPage() {
   const [started, setStarted] = useState(false);
   const [demoMode, setDemoMode] = useState(false);
+  const [demoCity, setDemoCity] = useState<LatLng>(DEMO_LOCATION);
   const [demoHeading, setDemoHeading] = useState(180);
   const [selected, setSelected] = useState<BuildingFeature | null>(null);
   const [buildings, setBuildings] = useState<BuildingFeature[]>([]);
-  const [loadingBuildings, setLoadingBuildings] = useState(false);
+  const [packStatus, setPackStatus] = useState<LoadStatus | null>(null);
   const [fetchError, setFetchError] = useState<string | null>(null);
+  const [packFromCache, setPackFromCache] = useState(false);
+  const [showCityPicker, setShowCityPicker] = useState(false);
+  const reloadKey = useRef(0);
 
   const mobile = useMemo(isMobile, []);
 
@@ -39,40 +47,81 @@ function SkylineARPage() {
   const orientation = useDeviceOrientation();
   const geo = useGeolocation(started && !demoMode);
 
-  const userPos = demoMode ? DEMO_LOCATION : geo.position;
+  const userPos = demoMode ? demoCity : geo.position;
   const heading = demoMode ? demoHeading : orientation.heading;
 
-  // Start handler — request permissions
   const handleStart = async () => {
     setStarted(true);
     await orientation.request();
   };
 
-  // Fetch buildings when position is known
+  // Load area pack whenever the user position changes
   useEffect(() => {
-    if (demoMode) {
+    if (demoMode && userPos === DEMO_LOCATION && !readPack(DEMO_LOCATION, 5000)) {
+      // No need to hit network for the canned NYC demo
       setBuildings(DEMO_BUILDINGS);
+      setPackStatus({ kind: "cache-hit", buildings: DEMO_BUILDINGS });
+      setPackFromCache(true);
       return;
     }
     if (!userPos) return;
-    const ac = new AbortController();
-    setLoadingBuildings(true);
-    setFetchError(null);
-    fetchNearbyBuildings(userPos, 5000, ac.signal)
-      .then((b) => setBuildings(b))
-      .catch((e) => {
-        if (e.name !== "AbortError") setFetchError(e.message ?? "Fetch failed");
-      })
-      .finally(() => setLoadingBuildings(false));
-    return () => ac.abort();
-  }, [userPos?.lat?.toFixed(3), userPos?.lng?.toFixed(3), demoMode]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Desktop auto demo
+    const ac = new AbortController();
+    setFetchError(null);
+    setPackFromCache(false);
+    setPackStatus({ kind: "downloading", mirror: "", attempt: 0 });
+
+    loadAreaPack(userPos, {
+      radiusMeters: 5000,
+      signal: ac.signal,
+      onStatus: (s) => {
+        setPackStatus(s);
+        if (s.kind === "cache-hit") setPackFromCache(true);
+      },
+    })
+      .then((b) => {
+        setBuildings(b);
+        if (b.length === 0 && demoMode) {
+          // Fall back to canned demo if the API returned nothing useful
+          setBuildings(DEMO_BUILDINGS);
+        }
+      })
+      .catch((e) => {
+        if ((e as Error).name === "AbortError") return;
+        // Final fallback: canned NYC dataset so the UI still has something
+        setBuildings(DEMO_BUILDINGS);
+        setFetchError((e as Error).message ?? "Load failed");
+      });
+
+    return () => ac.abort();
+  }, [userPos?.lat, userPos?.lng, demoMode, reloadKey.current]);
+
+  // Desktop auto-demo
   useEffect(() => {
-    if (started && !mobile && !demoMode) {
-      setDemoMode(true);
-    }
+    if (started && !mobile && !demoMode) setDemoMode(true);
   }, [started, mobile, demoMode]);
+
+  const retryPack = () => {
+    reloadKey.current += 1;
+    setFetchError(null);
+    setBuildings([]);
+    setPackStatus({ kind: "downloading", mirror: "", attempt: 0 });
+    if (userPos) {
+      loadAreaPack(userPos, {
+        radiusMeters: 5000,
+        forceRefresh: true,
+        onStatus: setPackStatus,
+      })
+        .then(setBuildings)
+        .catch((e) => setFetchError((e as Error).message));
+    }
+  };
+
+  const pickCity = (loc: LatLng) => {
+    setDemoCity(loc);
+    setDemoMode(true);
+    setShowCityPicker(false);
+  };
 
   if (!started) {
     return (
@@ -82,6 +131,8 @@ function SkylineARPage() {
       </main>
     );
   }
+
+  const gpsStuck = !demoMode && (geo.timedOut || (geo.error && !geo.position));
 
   return (
     <main className="fixed inset-0 overflow-hidden bg-black text-white">
@@ -104,11 +155,11 @@ function SkylineARPage() {
       {demoMode && (
         <div className="absolute left-1/2 top-20 z-10 -translate-x-1/2 hud-pill flex items-center gap-2 rounded-full px-4 py-1.5 font-mono-hud text-[10px] uppercase text-white/80">
           <Smartphone className="h-3 w-3 text-[var(--hud-accent)]" />
-          Demo mode · designed for mobile
+          Demo mode · {nearestCityLabel(demoCity)}
         </div>
       )}
 
-      {/* Errors */}
+      {/* Camera error */}
       {!demoMode && camError && (
         <ErrorBanner
           title="Camera unavailable"
@@ -117,27 +168,36 @@ function SkylineARPage() {
           actionLabel="Use demo mode"
         />
       )}
-      {!demoMode && geo.error && !camError && (
+
+      {/* GPS stuck → offer escape hatches */}
+      {gpsStuck && !camError && (
         <ErrorBanner
-          title="Location unavailable"
-          msg={geo.error}
-          action={() => setDemoMode(true)}
-          actionLabel="Use demo mode"
+          title={geo.timedOut ? "GPS is taking too long" : "Location unavailable"}
+          msg={
+            geo.error ??
+            "Some browsers (Safari in private mode, iframes, desktop) block geolocation. You can pick a city to explore instead."
+          }
+          action={() => setShowCityPicker(true)}
+          actionLabel="Pick a city"
         />
       )}
 
       {/* Compass HUD */}
       <CompassHUD heading={heading} />
 
+      {/* Pack status pill (top-left) */}
+      {userPos && (
+        <PackPill status={packStatus} fromCache={packFromCache} count={buildings.length} />
+      )}
+
       {/* Loading state */}
-      {!demoMode && (loadingBuildings || !camReady || heading == null || !userPos) && (
+      {!demoMode && !gpsStuck && (!camReady || heading == null || !userPos) && (
         <div className="pointer-events-none absolute left-1/2 top-1/2 z-10 flex -translate-x-1/2 -translate-y-1/2 flex-col items-center gap-3">
           <Loader2 className="h-6 w-6 animate-spin text-[var(--hud-accent)]" />
           <div className="font-mono-hud text-[10px] uppercase tracking-widest text-white/70">
             {!camReady && "Starting camera…"}
             {camReady && !userPos && "Acquiring GPS…"}
             {camReady && userPos && heading == null && "Calibrate compass — rotate phone in figure-8"}
-            {camReady && userPos && heading != null && loadingBuildings && "Scanning skyline…"}
           </div>
         </div>
       )}
@@ -153,11 +213,26 @@ function SkylineARPage() {
         />
       )}
 
-      {/* Empty state */}
-      {!loadingBuildings && userPos && buildings.length === 0 && !fetchError && (
-        <CenterMsg msg="No named buildings found nearby. Try moving to a city center." />
+      {/* Empty / error */}
+      {userPos &&
+        packStatus?.kind !== "downloading" &&
+        buildings.length === 0 &&
+        !fetchError && (
+          <CenterMsg
+            msg="No named buildings found nearby. Try moving to a city center."
+            actionLabel="Try another city"
+            onAction={() => setShowCityPicker(true)}
+          />
+        )}
+      {fetchError && (
+        <CenterMsg
+          msg={`Couldn't reach building data: ${fetchError}`}
+          actionLabel="Retry download"
+          onAction={retryPack}
+          secondaryLabel="Pick a city"
+          onSecondary={() => setShowCityPicker(true)}
+        />
       )}
-      {fetchError && <CenterMsg msg={`Couldn't reach building data. ${fetchError}`} />}
 
       {/* Demo heading slider */}
       {demoMode && (
@@ -166,7 +241,12 @@ function SkylineARPage() {
             <span className="flex items-center gap-1.5">
               <RotateCw className="h-3 w-3" /> Pan view
             </span>
-            <span className="text-[var(--hud-accent)]">{Math.round(demoHeading)}°</span>
+            <button
+              onClick={() => setShowCityPicker(true)}
+              className="flex items-center gap-1 text-[var(--hud-accent)] hover:underline"
+            >
+              <MapPin className="h-3 w-3" /> Change city
+            </button>
           </div>
           <input
             type="range"
@@ -176,12 +256,120 @@ function SkylineARPage() {
             onChange={(e) => setDemoHeading(parseInt(e.target.value))}
             className="w-full accent-[var(--hud-accent)]"
           />
+          <div className="mt-1 text-right font-mono-hud text-[10px] text-[var(--hud-accent)]">
+            {Math.round(demoHeading)}°
+          </div>
         </div>
+      )}
+
+      {showCityPicker && (
+        <CityPicker
+          onPick={pickCity}
+          onClose={() => setShowCityPicker(false)}
+        />
       )}
 
       <BuildingInfoSheet building={selected} onClose={() => setSelected(null)} />
     </main>
   );
+}
+
+/* ---------- subcomponents ---------- */
+
+function PackPill({
+  status,
+  fromCache,
+  count,
+}: {
+  status: LoadStatus | null;
+  fromCache: boolean;
+  count: number;
+}) {
+  if (!status) return null;
+
+  let icon = <Loader2 className="h-3 w-3 animate-spin" />;
+  let label = "Preparing area pack…";
+  let tone = "text-white/70";
+
+  if (status.kind === "downloading") {
+    icon = <Download className="h-3 w-3 animate-pulse" />;
+    label = status.attempt
+      ? `Downloading area pack · mirror ${status.attempt}/3`
+      : "Downloading area pack…";
+  } else if (status.kind === "downloaded") {
+    icon = <CheckCircle2 className="h-3 w-3" />;
+    label = `Area pack ready · ${count} buildings`;
+    tone = "text-[var(--hud-accent)]";
+  } else if (status.kind === "cache-hit") {
+    icon = <CheckCircle2 className="h-3 w-3" />;
+    label = fromCache
+      ? `Cached pack · ${count} buildings`
+      : `Area pack ready · ${count} buildings`;
+    tone = "text-[var(--hud-accent)]";
+  } else if (status.kind === "failed") {
+    icon = <RefreshCw className="h-3 w-3" />;
+    label = "Area pack failed";
+    tone = "text-red-300";
+  }
+
+  return (
+    <div
+      className={`absolute left-4 top-20 z-10 hud-pill flex items-center gap-2 rounded-full px-3 py-1.5 font-mono-hud text-[10px] uppercase ${tone}`}
+    >
+      {icon}
+      <span>{label}</span>
+    </div>
+  );
+}
+
+function CityPicker({
+  onPick,
+  onClose,
+}: {
+  onPick: (loc: LatLng) => void;
+  onClose: () => void;
+}) {
+  return (
+    <div className="absolute inset-0 z-30 flex items-center justify-center bg-black/70 backdrop-blur-md">
+      <div className="hud-pill w-[min(420px,92vw)] rounded-3xl p-6">
+        <div className="mb-1 font-display text-xl font-semibold text-white">Pick a city</div>
+        <div className="mb-4 font-mono-hud text-[10px] uppercase text-white/60">
+          We'll download its skyline pack
+        </div>
+        <div className="grid grid-cols-1 gap-2">
+          {DEMO_CITIES.map((c) => (
+            <button
+              key={c.name}
+              onClick={() => onPick(c.location)}
+              className="flex items-center justify-between rounded-xl border border-white/10 bg-white/5 px-4 py-3 text-left text-sm text-white transition hover:border-[var(--hud-accent)]/60 hover:bg-white/10"
+            >
+              <span>{c.name}</span>
+              <MapPin className="h-4 w-4 text-[var(--hud-accent)]" />
+            </button>
+          ))}
+        </div>
+        <button
+          onClick={onClose}
+          className="mt-4 w-full rounded-full bg-white/10 px-4 py-2 font-mono-hud text-[10px] uppercase text-white/70"
+        >
+          Cancel
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function nearestCityLabel(loc: LatLng): string {
+  let best = DEMO_CITIES[0];
+  let bestD = Infinity;
+  for (const c of DEMO_CITIES) {
+    const d = Math.hypot(c.location.lat - loc.lat, c.location.lng - loc.lng);
+    if (d < bestD) {
+      bestD = d;
+      best = c;
+    }
+  }
+  return best.name;
 }
 
 function ErrorBanner({
@@ -209,10 +397,42 @@ function ErrorBanner({
   );
 }
 
-function CenterMsg({ msg }: { msg: string }) {
+function CenterMsg({
+  msg,
+  actionLabel,
+  onAction,
+  secondaryLabel,
+  onSecondary,
+}: {
+  msg: string;
+  actionLabel?: string;
+  onAction?: () => void;
+  secondaryLabel?: string;
+  onSecondary?: () => void;
+}) {
   return (
-    <div className="pointer-events-none absolute left-1/2 top-1/2 z-10 w-[min(360px,90vw)] -translate-x-1/2 -translate-y-1/2 hud-pill rounded-2xl p-4 text-center font-mono-hud text-xs text-white/80">
-      {msg}
+    <div className="absolute left-1/2 top-1/2 z-10 w-[min(360px,90vw)] -translate-x-1/2 -translate-y-1/2 hud-pill rounded-2xl p-4 text-center font-mono-hud text-xs text-white/80">
+      <div>{msg}</div>
+      {(actionLabel || secondaryLabel) && (
+        <div className="mt-3 flex justify-center gap-2">
+          {actionLabel && onAction && (
+            <button
+              onClick={onAction}
+              className="rounded-full bg-[var(--hud-accent)] px-4 py-1.5 text-[10px] uppercase text-[#001218]"
+            >
+              {actionLabel}
+            </button>
+          )}
+          {secondaryLabel && onSecondary && (
+            <button
+              onClick={onSecondary}
+              className="rounded-full bg-white/10 px-4 py-1.5 text-[10px] uppercase text-white/80"
+            >
+              {secondaryLabel}
+            </button>
+          )}
+        </div>
+      )}
     </div>
   );
 }
@@ -244,7 +464,6 @@ function DemoBackdrop() {
             "linear-gradient(180deg, #0a1420 0%, #0a1420 55%, #1a2a3a 75%, #2a3a4a 100%)",
         }}
       />
-      {/* Skyline silhouette */}
       <svg
         className="absolute bottom-0 left-0 w-full"
         viewBox="0 0 1200 300"
@@ -262,7 +481,6 @@ function DemoBackdrop() {
           d="M0,300 L0,180 L60,180 L60,120 L120,120 L120,200 L180,200 L180,80 L240,80 L240,160 L300,160 L300,40 L360,40 L360,140 L420,140 L420,100 L480,100 L480,180 L540,180 L540,60 L600,60 L600,170 L660,170 L660,110 L720,110 L720,30 L780,30 L780,150 L840,150 L840,90 L900,90 L900,190 L960,190 L960,130 L1020,130 L1020,70 L1080,70 L1080,180 L1140,180 L1140,140 L1200,140 L1200,300 Z"
         />
       </svg>
-      {/* Stars */}
       {Array.from({ length: 60 }).map((_, i) => (
         <div
           key={i}
