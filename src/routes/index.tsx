@@ -36,6 +36,7 @@ function SkylineARPage() {
   const [showCityPicker, setShowCityPicker] = useState(false);
   const [zoom, setZoom] = useState(1); // 1x .. 3x; narrows FOV and scales video
   const [tapMode, setTapMode] = useState(false);
+  const [tapMiss, setTapMiss] = useState<number | null>(null); // timestamp of last miss
 
   const mobile = useMemo(isMobile, []);
 
