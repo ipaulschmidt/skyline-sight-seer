@@ -4,6 +4,7 @@ import type { BuildingFeature } from "@/lib/overpass";
 import { fetchBuildingInfo, type BuildingEnrichment } from "@/lib/wikipedia";
 import { ExternalLink, MapPin, Database } from "lucide-react";
 import { distanceMeters, type LatLng } from "@/lib/geo";
+import type { ReverseGeocodeResult } from "@/lib/reverseGeocode";
 
 interface Props {
   building: BuildingFeature | null;
@@ -11,7 +12,16 @@ interface Props {
   userLocation?: LatLng | null;
   /** Unused now — kept for prop compatibility with the page. */
   allBuildings?: BuildingFeature[];
+  /**
+   * Lightweight identification result from a tap on an unlabeled spot. When
+   * provided (and `building` is null), the sheet renders the amber-tagged
+   * "identified by location" mode instead of the normal building info view.
+   */
+  locationResult?:
+    | (ReverseGeocodeResult & { distanceMeters: number; bearingDeg: number })
+    | null;
 }
+
 
 const FETCH_TIMEOUT_MS = 4000;
 
@@ -103,7 +113,7 @@ function copyFeedbackString(building: BuildingFeature) {
   }
 }
 
-export function BuildingInfoSheet({ building, onClose, userLocation }: Props) {
+export function BuildingInfoSheet({ building, onClose, userLocation, locationResult }: Props) {
   const [info, setInfo] = useState<BuildingEnrichment | null>(null);
   const [loading, setLoading] = useState(false);
   const [copied, setCopied] = useState(false);
@@ -175,8 +185,63 @@ export function BuildingInfoSheet({ building, onClose, userLocation }: Props) {
     window.setTimeout(() => setCopied(false), 2000);
   };
 
+  // ---- Identification (unverified, lightweight) mode ----
+  if (!building && locationResult) {
+    const lr = locationResult;
+    const name = lr.buildingName ?? lr.displayName ?? "Unknown Structure";
+    const distLabel =
+      lr.distanceMeters > 1000
+        ? `${(lr.distanceMeters / 1000).toFixed(1)} km`
+        : `${Math.round(lr.distanceMeters)} m`;
+    const bearingLabel = `${Math.round(((lr.bearingDeg % 360) + 360) % 360)}°`;
+    const lrOsmUrl = `https://www.openstreetmap.org/?mlat=${lr.lat}&mlon=${lr.lng}&zoom=18`;
+    return (
+      <Sheet open={!!locationResult} onOpenChange={(o) => !o && onClose()}>
+        <SheetContent
+          side="bottom"
+          className="hud-glass max-h-[85vh] overflow-y-auto rounded-t-3xl border-0 px-6 pb-8 pt-6 text-foreground"
+        >
+          <SheetHeader className="text-left">
+            <div className="font-mono-hud text-[10px] text-amber-300">
+              IDENTIFIED BY LOCATION
+            </div>
+            <SheetTitle className="font-display text-2xl font-semibold uppercase leading-tight tracking-wide text-white">
+              {name}
+            </SheetTitle>
+            {lr.fullAddress && (
+              <div className="mt-1 flex items-center gap-1 font-mono-hud text-[11px] text-white/60">
+                <MapPin className="h-3 w-3" /> {lr.fullAddress}
+              </div>
+            )}
+          </SheetHeader>
+
+          <div className="mt-4 grid grid-cols-2 gap-2">
+            <Pill label="DISTANCE" value={distLabel} />
+            <Pill label="BEARING" value={bearingLabel} />
+          </div>
+
+          <div className="mt-5 rounded-2xl border border-amber-400/20 bg-amber-400/5 px-4 py-3 text-xs leading-relaxed text-white/60">
+            Location estimated from compass bearing. Tap a labeled building for verified data.
+          </div>
+
+          <div className="mt-5 flex flex-wrap gap-2">
+            <a
+              href={lrOsmUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center gap-2 rounded-full border border-white/15 bg-white/5 px-4 py-2 font-mono-hud text-xs uppercase text-white/85 transition hover:bg-white/10"
+            >
+              <MapPin className="h-3 w-3" /> View on OpenStreetMap
+            </a>
+          </div>
+        </SheetContent>
+      </Sheet>
+    );
+  }
+
   return (
     <Sheet open={!!building} onOpenChange={(o) => !o && onClose()}>
+
       <SheetContent
         side="bottom"
         className="hud-glass max-h-[85vh] overflow-y-auto rounded-t-3xl border-0 px-6 pb-8 pt-6 text-foreground"

@@ -12,7 +12,10 @@ import {
   type LoadStatus,
 } from "@/lib/overpass";
 import type { LatLng } from "@/lib/geo";
+import { bearingAndDistanceToLatLng, distanceMeters } from "@/lib/geo";
+import { reverseGeocode, type ReverseGeocodeResult } from "@/lib/reverseGeocode";
 import { AROverlay, pickBuildingAtBearing } from "@/components/skyline/AROverlay";
+
 import { CompassHUD } from "@/components/skyline/CompassHUD";
 import { BuildingInfoSheet } from "@/components/skyline/BuildingInfoSheet";
 import { PermissionGate } from "@/components/skyline/PermissionGate";
@@ -51,7 +54,11 @@ function SkylineARPage() {
   const [zoom, setZoom] = useState(1); // 1x .. 3x; narrows FOV and scales video
   const [tapMode, setTapMode] = useState(false);
   const [tapMiss, setTapMiss] = useState<number | null>(null); // timestamp of last miss
+  const [locationResult, setLocationResult] = useState<
+    (ReverseGeocodeResult & { distanceMeters: number; bearingDeg: number }) | null
+  >(null);
   const [compassOffset, setCompassOffset] = useState(0);
+
   const [showCalibration, setShowCalibration] = useState(false);
   const [calibratedThisSession, setCalibratedThisSession] = useState(false);
   const [floor, setFloor] = useState<number>(0); // 0 = ground; user-set override
@@ -251,12 +258,33 @@ function SkylineARPage() {
                   if (hit) {
                     setSelected(hit);
                     setTapMiss(null);
-                  } else {
-                    setTapMiss(Date.now());
+                    return;
                   }
+                  // No labeled building hit — fire the lightweight
+                  // identify-by-location flow. The pulse animation already
+                  // fired inside the overlay, so the user sees feedback.
+                  setTapMiss(null);
+                  const targetBearing = (heading + offset + 360) % 360;
+                  const estDistance = 500; // rough lookup point
+                  const target = bearingAndDistanceToLatLng(
+                    userPos.lat,
+                    userPos.lng,
+                    targetBearing,
+                    estDistance,
+                  );
+                  void reverseGeocode(target.lat, target.lng).then((r) => {
+                    const d = distanceMeters(userPos, { lat: r.lat, lng: r.lng });
+                    setSelected(null);
+                    setLocationResult({
+                      ...r,
+                      distanceMeters: d,
+                      bearingDeg: targetBearing,
+                    });
+                  });
                 }
               : undefined
           }
+
         />
       )}
 
@@ -462,9 +490,14 @@ function SkylineARPage() {
 
       <BuildingInfoSheet
         building={selected}
-        onClose={() => setSelected(null)}
+        onClose={() => {
+          setSelected(null);
+          setLocationResult(null);
+        }}
         userLocation={userPos}
         allBuildings={buildings}
+        locationResult={selected ? null : locationResult}
+
       />
     </main>
   );

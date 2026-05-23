@@ -35,3 +35,32 @@ export function angularDelta(heading: number, target: number): number {
   let d = ((target - heading + 540) % 360) - 180;
   return d;
 }
+
+/**
+ * Forward haversine: given an origin, bearing (deg, 0=N CW), and distance (m),
+ * return the destination lat/lng. Used to translate a tap (bearing + estimated
+ * distance) into a coordinate for reverse geocoding.
+ */
+export function bearingAndDistanceToLatLng(
+  originLat: number,
+  originLng: number,
+  bearingDegInput: number,
+  distanceMetersInput: number,
+): LatLng {
+  const R = 6371000;
+  const ang = distanceMetersInput / R;
+  const brng = toRad(bearingDegInput);
+  const lat1 = toRad(originLat);
+  const lng1 = toRad(originLng);
+  const lat2 = Math.asin(
+    Math.sin(lat1) * Math.cos(ang) +
+      Math.cos(lat1) * Math.sin(ang) * Math.cos(brng),
+  );
+  const lng2 =
+    lng1 +
+    Math.atan2(
+      Math.sin(brng) * Math.sin(ang) * Math.cos(lat1),
+      Math.cos(ang) - Math.sin(lat1) * Math.sin(lat2),
+    );
+  return { lat: toDeg(lat2), lng: ((toDeg(lng2) + 540) % 360) - 180 };
+}

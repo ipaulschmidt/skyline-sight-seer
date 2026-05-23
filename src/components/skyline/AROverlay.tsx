@@ -1,4 +1,4 @@
-import { useMemo, useRef } from "react";
+import { useMemo, useRef, useState } from "react";
 import { angularDelta, bearingDeg, distanceMeters, type LatLng } from "@/lib/geo";
 import type { BuildingFeature } from "@/lib/overpass";
 import {
@@ -8,6 +8,7 @@ import {
 } from "@/lib/feedback";
 import { loadFovDegrees } from "./FOVCalibration";
 import { ThumbsUp, ThumbsDown, ChevronRight } from "lucide-react";
+
 
 interface Props {
   user: LatLng;
@@ -195,10 +196,25 @@ export function AROverlay({
     viewerHeightMeters,
   ]);
 
+  // Tap pulses — ephemeral visual feedback at the tap point for every
+  // wrapper tap (i.e. taps that didn't hit a label button).
+  const [pulses, setPulses] = useState<{ id: number; x: number; y: number }[]>([]);
+  const pulseIdRef = useRef(0);
+
   const handleTap = (e: React.MouseEvent<HTMLDivElement>) => {
-    if (!onTapBearing) return;
     const rect = e.currentTarget.getBoundingClientRect();
     const xPct = ((e.clientX - rect.left) / rect.width) * 100;
+    const yPx = e.clientY - rect.top;
+    const xPx = e.clientX - rect.left;
+
+    // Always show the pulse so the user knows the tap registered.
+    const id = ++pulseIdRef.current;
+    setPulses((prev) => [...prev, { id, x: xPx, y: yPx }]);
+    window.setTimeout(() => {
+      setPulses((prev) => prev.filter((p) => p.id !== id));
+    }, 650);
+
+    if (!onTapBearing) return;
     const half = effectiveFov / 2;
     const offset = ((xPct - 50) / 50) * half;
     onTapBearing(offset);
@@ -212,6 +228,20 @@ export function AROverlay({
     >
       <div className="pointer-events-none absolute left-0 right-0 top-1/2 h-px bg-white/10" />
 
+      {/* Tap-pulse feedback */}
+      {pulses.map((p) => (
+        <div
+          key={p.id}
+          className="pointer-events-none absolute z-40"
+          style={{ left: p.x, top: p.y }}
+        >
+          <div
+            className="tap-pulse h-12 w-12 rounded-full border-2 border-[var(--hud-accent)]"
+            style={{ boxShadow: "0 0 24px rgba(0,191,255,0.6)" }}
+          />
+        </div>
+      ))}
+
       {onTapBearing && (
         <div className="pointer-events-none absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 opacity-40">
           <div className="h-8 w-8 rounded-full border border-[var(--hud-accent)]" />
@@ -219,6 +249,7 @@ export function AROverlay({
           <div className="absolute left-1/2 top-1/2 h-px w-3 -translate-x-1/2 -translate-y-1/2 bg-[var(--hud-accent)]" />
         </div>
       )}
+
 
       {(() => {
         // Build clusters: any labels whose screen position is close enough
@@ -311,15 +342,28 @@ export function AROverlay({
             if (next) onSelect(next);
           };
 
+          // Edge-aware horizontal anchor:
+          //   left 30%  → grow rightward  (translateX 0)
+          //   right 30% → grow leftward   (translateX -100%)
+          //   middle    → centered        (translateX -50%)
+          const anchorTx =
+            p.xPct < 30 ? "0%" : p.xPct > 70 ? "-100%" : "-50%";
+
           return (
             <div
               key={p.b.id}
-              className={`absolute flex flex-col items-center ${zClass}`}
+              className={`absolute flex flex-col ${
+                p.xPct < 30
+                  ? "items-start"
+                  : p.xPct > 70
+                    ? "items-end"
+                    : "items-center"
+              } ${zClass}`}
               style={{
                 left: `${p.xPct}%`,
                 top: `${p.yPct}%`,
-                transform: `translate(-50%, calc(-50% + ${peekOffset}px)) scale(${p.scale})`,
-                transformOrigin: "center",
+                transform: `translate(${anchorTx}, calc(-50% + ${peekOffset}px))`,
+                maxWidth: "70vw",
               }}
             >
               <button
@@ -328,29 +372,33 @@ export function AROverlay({
                   e.stopPropagation();
                   onSelect(p.b);
                 }}
-                className={`pointer-events-auto hud-pill rounded-full transition-all ${voteClass} ${dimWhenOverlapped} ${
+                className={`pointer-events-auto hud-pill rounded-full transition-all overflow-hidden ${voteClass} ${dimWhenOverlapped} ${
                   selected
-                    ? "px-3 py-1.5 ring-2 ring-[var(--hud-accent)] shadow-[0_0_20px_rgba(0,191,255,0.5)] bg-black/80"
-                    : "px-2.5 py-1"
+                    ? "ring-2 ring-[var(--hud-accent)] shadow-[0_0_20px_rgba(0,191,255,0.5)] bg-black/80"
+                    : ""
                 }`}
+                style={{
+                  maxWidth: "160px",
+                  padding: "6px 10px",
+                }}
               >
-                <div className="flex items-center gap-1.5">
+                <div className="flex items-center gap-1.5 overflow-hidden">
                   <div
-                    className={`font-display font-semibold leading-tight whitespace-nowrap ${
-                      selected
-                        ? "text-[13px] text-[var(--hud-accent)]"
-                        : "text-[11px] text-white"
+                    className={`font-display font-semibold leading-tight overflow-hidden text-ellipsis whitespace-nowrap ${
+                      selected ? "text-[var(--hud-accent)]" : "text-white"
                     }`}
+                    style={{ fontSize: "13px", maxWidth: "140px" }}
                   >
                     {p.b.name}
                   </div>
-                  {vote === "up" && <ThumbsUp className="h-3 w-3 text-emerald-400" />}
-                  {vote === "down" && <ThumbsDown className="h-3 w-3 text-red-400" />}
+                  {vote === "up" && <ThumbsUp className="h-3 w-3 shrink-0 text-emerald-400" />}
+                  {vote === "down" && <ThumbsDown className="h-3 w-3 shrink-0 text-red-400" />}
                 </div>
                 <div
-                  className={`font-mono-hud whitespace-nowrap ${
-                    selected ? "text-[11px] text-white/85 mt-0.5" : "text-[9px] text-white/60"
+                  className={`font-mono-hud whitespace-nowrap overflow-hidden text-ellipsis ${
+                    selected ? "text-white/85 mt-0.5" : "text-white/60"
                   }`}
+                  style={{ fontSize: "11px" }}
                 >
                   {heightLabel} · {distLabel}
                 </div>
@@ -374,6 +422,7 @@ export function AROverlay({
               )}
             </div>
           );
+
         });
       })()}
     </div>
