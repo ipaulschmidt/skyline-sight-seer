@@ -25,6 +25,7 @@ import {
 import {
   FOVCalibration,
   hasFovCalibration,
+  loadFovDegrees,
 } from "@/components/skyline/FOVCalibration";
 import { Loader2, Smartphone, RotateCw, Download, MapPin, CheckCircle2, RefreshCw, ZoomIn, ZoomOut, Crosshair, Compass, Building2, LocateFixed, Scan } from "lucide-react";
 
