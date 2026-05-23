@@ -306,16 +306,6 @@ function SkylineARPage() {
           >
             <ZoomOut className="h-4 w-4" />
           </button>
-          <button
-            onClick={() => setTapMode((t) => !t)}
-            className={`hud-pill mt-2 flex h-10 w-10 items-center justify-center rounded-full ${
-              tapMode ? "ring-2 ring-[var(--hud-accent)] text-[var(--hud-accent)]" : ""
-            }`}
-            aria-label="Tap to label"
-            aria-pressed={tapMode}
-          >
-            <Crosshair className="h-4 w-4" />
-          </button>
           {!demoMode && (
             <button
               onClick={() => setShowCalibration(true)}
