@@ -43,36 +43,39 @@ export function CompassCalibration({
     if (heading == null || phase === "tune") return;
     const now = performance.now();
     samples.current.push({ t: now, h: heading });
-    // keep last 1500ms
-    samples.current = samples.current.filter((s) => now - s.t < 1500);
+    // keep last 1200ms
+    samples.current = samples.current.filter((s) => now - s.t < 1200);
 
-    // coverage in 10° bins
-    coverage.current.add(Math.floor(((heading % 360) + 360) % 360 / 10));
-    const pct = Math.min(100, (coverage.current.size / 27) * 100); // 27/36 bins = 270°
+    // coverage in 20° bins — 9/18 bins = 180° is plenty to prove sensor responds
+    coverage.current.add(Math.floor(((heading % 360) + 360) % 360 / 20));
+    const pct = Math.min(100, (coverage.current.size / 9) * 100);
     setCoveragePct(pct);
 
-    // stability: spread of recent samples
-    if (samples.current.length >= 8) {
+    // stability: spread of recent samples (looser threshold)
+    if (samples.current.length >= 6) {
       const ref = samples.current[0].h;
       const spread = samples.current.reduce(
         (m, s) => Math.max(m, Math.abs(angDiff(s.h, ref))),
         0,
       );
-      const isStable = spread < 6;
+      const isStable = spread < 12;
       setStable(isStable);
 
+      // Advance as soon as enough coverage is gathered AND user has held still
       if (pct >= 100 && isStable && phase === "rotate") {
         setPhase("hold");
       }
     }
   }, [heading, phase]);
 
-  // Auto-advance from "hold" to "tune" after ~800ms of continued stability
+  // Auto-advance from "hold" to "tune" after ~600ms
   useEffect(() => {
     if (phase !== "hold") return;
-    const t = setTimeout(() => setPhase("tune"), 800);
+    const t = setTimeout(() => setPhase("tune"), 600);
     return () => clearTimeout(t);
   }, [phase]);
+
+  const canFinishEarly = coveragePct >= 60;
 
   return (
     <div className="absolute inset-0 z-40 flex items-center justify-center bg-black/80 backdrop-blur-md">
