@@ -42,14 +42,27 @@ export function AROverlay({
 
   const projected = useMemo<Projected[]>(() => {
     const half = fovDeg / 2;
-    const candidates: Omit<Projected, "lane">[] = [];
+    const zoomFactor = fovDeg / 60; // 1 at normal, ~0.33 at strong zoom
+
+    // Tighter distance cap. Zoom extends reach (telephoto sees farther).
+    // 2km baseline, up to ~4km at 3x zoom.
+    const maxDist = 2000 / Math.max(0.5, zoomFactor);
+
+    // First pass: gather everything in FOV with basic visibility info.
+    interface Pre {
+      b: BuildingFeature;
+      delta: number;
+      distance: number;
+      h: number;
+      /** angular elevation of the rooftop = atan(h/dist), in radians */
+      angTop: number;
+    }
+    const pre: Pre[] = [];
     for (const b of buildings) {
       const h = b.heightMeters ?? (b.levels ? b.levels * 3.2 : 0);
       const dist = distanceMeters(user, { lat: b.lat, lng: b.lng });
-      if (dist < 30 || dist > 5000) continue;
+      if (dist < 30 || dist > maxDist) continue;
 
-      // Loosen height filter when zoomed in (narrow FOV) — user wants detail.
-      const zoomFactor = fovDeg / 60; // 1 at normal, 0.3 at strong zoom
       const requiredHeight = Math.max(
         minHeightMeters * Math.max(0.5, zoomFactor),
         (25 + (dist / 1000) * 25) * Math.max(0.5, zoomFactor),
@@ -60,16 +73,37 @@ export function AROverlay({
       const delta = angularDelta(heading, brng);
       if (Math.abs(delta) > half) continue;
 
-      const xPct = 50 + (delta / half) * 50;
-      const scale = Math.max(0.7, Math.min(1.1, 1.15 - dist / 6000));
-      const score = h / Math.sqrt(Math.max(dist, 1));
-      candidates.push({ b, delta, distance: dist, xPct, scale, score });
+      pre.push({ b, delta, distance: dist, h, angTop: Math.atan2(h, dist) });
     }
+
+    // Occlusion pass: a building is hidden if a CLOSER building in roughly the
+    // same direction has a taller apparent height (rooftop angular elevation).
+    // Bearing window scales with FOV — tight angular cone in front of viewer.
+    const occWindow = Math.max(1.2, 2.5 * zoomFactor); // degrees
+    const byDist = [...pre].sort((a, b) => a.distance - b.distance);
+    const visible: Pre[] = [];
+    for (const p of byDist) {
+      const blocked = visible.some(
+        (n) =>
+          n.distance < p.distance - 20 && // must be meaningfully closer
+          Math.abs(n.delta - p.delta) < occWindow &&
+          n.angTop >= p.angTop * 0.95, // near building's top covers far building
+      );
+      if (!blocked) visible.push(p);
+    }
+
+    // Project + score the survivors.
+    const candidates: Omit<Projected, "lane">[] = visible.map((p) => {
+      const xPct = 50 + (p.delta / half) * 50;
+      const scale = Math.max(0.7, Math.min(1.1, 1.15 - p.distance / 6000));
+      // Prefer nearer + taller buildings (they dominate the actual view).
+      const score = p.h / Math.sqrt(Math.max(p.distance, 1)) + 50 / Math.max(p.distance, 50) * 1000;
+      return { b: p.b, delta: p.delta, distance: p.distance, xPct, scale, score };
+    });
 
     candidates.sort((a, b) => b.score - a.score);
     const kept: Omit<Projected, "lane">[] = [];
-    // Separation scales with FOV: stay 4° apart at normal zoom, tighter when zoomed in
-    const minSeparationDeg = Math.max(1.5, 4 * (fovDeg / 60));
+    const minSeparationDeg = Math.max(1.5, 4 * zoomFactor);
     for (const c of candidates) {
       if (kept.length >= maxMarkers) break;
       if (kept.some((k) => Math.abs(k.delta - c.delta) < minSeparationDeg)) continue;
