@@ -327,16 +327,18 @@ export function AROverlay({
                   e.stopPropagation();
                   onSelect(p.b);
                 }}
-                className={`pointer-events-auto hud-pill rounded-full px-2.5 py-1 text-left transition-all ${voteClass} ${dimWhenOverlapped} ${
+                className={`pointer-events-auto hud-pill rounded-full transition-all ${voteClass} ${dimWhenOverlapped} ${
                   selected
-                    ? "ring-2 ring-[var(--hud-accent)] shadow-[0_0_20px_rgba(0,191,255,0.5)]"
-                    : ""
+                    ? "px-3 py-1.5 ring-2 ring-[var(--hud-accent)] shadow-[0_0_20px_rgba(0,191,255,0.5)] bg-black/80"
+                    : "px-2.5 py-1"
                 }`}
               >
                 <div className="flex items-center gap-1.5">
                   <div
-                    className={`font-display text-xs font-semibold leading-tight whitespace-nowrap ${
-                      selected ? "text-[var(--hud-accent)]" : "text-white"
+                    className={`font-display font-semibold leading-tight whitespace-nowrap ${
+                      selected
+                        ? "text-[13px] text-[var(--hud-accent)]"
+                        : "text-[11px] text-white"
                     }`}
                   >
                     {p.b.name}
@@ -344,7 +346,11 @@ export function AROverlay({
                   {vote === "up" && <ThumbsUp className="h-3 w-3 text-emerald-400" />}
                   {vote === "down" && <ThumbsDown className="h-3 w-3 text-red-400" />}
                 </div>
-                <div className="font-mono-hud text-[9px] text-white/60 whitespace-nowrap">
+                <div
+                  className={`font-mono-hud whitespace-nowrap ${
+                    selected ? "text-[11px] text-white/85 mt-0.5" : "text-[9px] text-white/60"
+                  }`}
+                >
                   {heightLabel} · {distLabel}
                 </div>
               </button>
