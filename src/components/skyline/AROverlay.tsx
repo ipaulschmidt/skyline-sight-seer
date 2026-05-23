@@ -232,11 +232,16 @@ export function pickBuildingAtBearing(
 ): BuildingFeature | null {
   const targetBearing = (heading + bearingOffsetDeg + 360) % 360;
 
-  const score = (delta: number, dist: number, h: number, tol: number) =>
-    (tol - delta) * 100 + (h || 5) / Math.sqrt(Math.max(dist, 1));
-
-  const search = (tol: number, maxDist: number) => {
-    let best: { b: BuildingFeature; score: number } | null = null;
+  // Gather all in-cone candidates with apparent height.
+  interface Cand {
+    b: BuildingFeature;
+    delta: number;
+    dist: number;
+    h: number;
+    angTop: number;
+  }
+  const inCone = (tol: number, maxDist: number): Cand[] => {
+    const out: Cand[] = [];
     for (const b of buildings) {
       const dist = distanceMeters(user, { lat: b.lat, lng: b.lng });
       if (dist < 5 || dist > maxDist) continue;
@@ -244,15 +249,27 @@ export function pickBuildingAtBearing(
       const delta = Math.abs(angularDelta(targetBearing, brng));
       if (delta > tol) continue;
       const h = b.heightMeters ?? (b.levels ? b.levels * 3.2 : 10);
-      const s = score(delta, dist, h, tol);
-      if (!best || s > best.score) best = { b, score: s };
+      out.push({ b, delta, dist, h, angTop: Math.atan2(h, dist) });
     }
-    return best?.b ?? null;
+    return out;
+  };
+
+  // Prefer the closest unoccluded candidate — that's what's actually in frame.
+  const pickFrom = (cands: Cand[]): BuildingFeature | null => {
+    if (!cands.length) return null;
+    const byDist = [...cands].sort((a, b) => a.dist - b.dist);
+    for (const c of byDist) {
+      const blocked = byDist.some(
+        (n) => n.dist < c.dist - 20 && n.angTop >= c.angTop * 0.95,
+      );
+      if (!blocked) return c.b;
+    }
+    return byDist[0].b;
   };
 
   return (
-    search(toleranceDeg, 5000) ||
-    search(toleranceDeg * 2, 5000) ||
-    search(toleranceDeg * 3, 8000)
+    pickFrom(inCone(toleranceDeg, 2500)) ||
+    pickFrom(inCone(toleranceDeg * 2, 3500)) ||
+    pickFrom(inCone(toleranceDeg * 3, 5000))
   );
 }
