@@ -2,7 +2,8 @@ import { useEffect, useState } from "react";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import type { BuildingFeature } from "@/lib/overpass";
 import { fetchWikipediaSummary, type WikiSummary } from "@/lib/wikipedia";
-import { ExternalLink } from "lucide-react";
+import { ExternalLink, ThumbsUp, ThumbsDown } from "lucide-react";
+import { getFeedback, setFeedback, type Vote } from "@/lib/feedback";
 
 interface Props {
   building: BuildingFeature | null;
@@ -12,17 +13,26 @@ interface Props {
 export function BuildingInfoSheet({ building, onClose }: Props) {
   const [summary, setSummary] = useState<WikiSummary | null>(null);
   const [loading, setLoading] = useState(false);
+  const [vote, setVote] = useState<Vote | null>(null);
 
   useEffect(() => {
     if (!building) return;
     const ac = new AbortController();
     setSummary(null);
     setLoading(true);
+    setVote(getFeedback(building.id)?.vote ?? null);
     fetchWikipediaSummary(building.name, ac.signal)
       .then((s) => setSummary(s))
       .finally(() => setLoading(false));
     return () => ac.abort();
   }, [building]);
+
+  const castVote = (v: Vote) => {
+    if (!building) return;
+    const entry = setFeedback(building.id, v);
+    // setFeedback toggles off when same vote is pressed twice (returns ts:0)
+    setVote(entry.ts === 0 ? null : v);
+  };
 
   return (
     <Sheet open={!!building} onOpenChange={(o) => !o && onClose()}>
