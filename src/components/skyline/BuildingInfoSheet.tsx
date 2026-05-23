@@ -1,119 +1,179 @@
 import { useEffect, useMemo, useState } from "react";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import type { BuildingFeature } from "@/lib/overpass";
-import { fetchWikipediaSummary, type WikiSummary } from "@/lib/wikipedia";
-import { ExternalLink, ThumbsUp, ThumbsDown, Check, Pencil } from "lucide-react";
-import {
-  getFeedback,
-  setFeedback,
-  setCorrection,
-  clearFeedback,
-  type FeedbackEntry,
-  type Vote,
-} from "@/lib/feedback";
+import { fetchBuildingInfo, type BuildingEnrichment } from "@/lib/wikipedia";
+import { ExternalLink, MapPin, Database } from "lucide-react";
 import { distanceMeters, type LatLng } from "@/lib/geo";
 
 interface Props {
   building: BuildingFeature | null;
   onClose: () => void;
-  /** Where the user is standing — attached to corrections for location-aware learning. */
   userLocation?: LatLng | null;
-  /** All loaded buildings — used to offer "pick the right one" candidates near the tap. */
+  /** Unused now — kept for prop compatibility with the page. */
   allBuildings?: BuildingFeature[];
 }
 
-const NEARBY_RADIUS_M = 250;
-const NEARBY_LIMIT = 8;
+const FETCH_TIMEOUT_MS = 4000;
 
-export function BuildingInfoSheet({
-  building,
-  onClose,
-  userLocation,
-  allBuildings,
-}: Props) {
-  const [summary, setSummary] = useState<WikiSummary | null>(null);
+/** Map common OSM `building=*` values to human-readable labels. */
+const BUILDING_TYPE_LABELS: Record<string, string> = {
+  apartments: "Residential",
+  residential: "Residential",
+  house: "House",
+  detached: "House",
+  terrace: "Townhouse",
+  hotel: "Hotel",
+  office: "Office Tower",
+  commercial: "Commercial",
+  retail: "Retail",
+  industrial: "Industrial",
+  warehouse: "Warehouse",
+  school: "School",
+  university: "University",
+  church: "Church",
+  cathedral: "Cathedral",
+  mosque: "Mosque",
+  temple: "Temple",
+  synagogue: "Synagogue",
+  hospital: "Hospital",
+  civic: "Civic",
+  government: "Government",
+  train_station: "Train Station",
+  stadium: "Stadium",
+  parking: "Parking Structure",
+  yes: "Building",
+};
+
+function prettyBuildingType(tags?: Record<string, string>): string | null {
+  if (!tags) return null;
+  const t = tags.building;
+  if (!t) return null;
+  if (BUILDING_TYPE_LABELS[t]) return BUILDING_TYPE_LABELS[t];
+  return t.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
+}
+
+function fullAddress(tags?: Record<string, string>): string | null {
+  if (!tags) return null;
+  const hn = tags["addr:housenumber"];
+  const street = tags["addr:street"];
+  if (hn && street) return `${hn} ${street}`;
+  if (street) return street;
+  return null;
+}
+
+/** "+1973-00-00T00:00:00Z" or "1973-04-01" or "1973" → "1973". */
+function yearOnly(s?: string | null): string | null {
+  if (!s) return null;
+  const m = s.match(/(\d{4})/);
+  return m ? m[1] : null;
+}
+
+function constructFallback(
+  building: BuildingFeature,
+  type: string | null,
+  address: string | null,
+  year: string | null,
+): string {
+  const parts: string[] = [building.name];
+  parts.push(" is a");
+  if (building.levels) parts.push(` ${building.levels}-floor`);
+  parts.push(` ${(type ?? "building").toLowerCase()}`);
+  if (year) parts.push(` built in ${year}`);
+  if (address) parts.push(`, located at ${address}`);
+  if (building.heightMeters) parts.push(`, standing ${Math.round(building.heightMeters)} meters tall`);
+  parts.push(".");
+  return parts.join("");
+}
+
+function copyFeedbackString(building: BuildingFeature) {
+  const tags = building.osmTags ?? {};
+  const lines = [
+    `Incorrect label report`,
+    `Name shown: ${building.name}`,
+    `OSM id: ${building.id}`,
+    `Coordinates: ${building.lat.toFixed(6)}, ${building.lng.toFixed(6)}`,
+    tags.building ? `OSM building=${tags.building}` : "",
+    `What is it actually? `,
+  ].filter(Boolean);
+  const text = lines.join("\n");
+  try {
+    void navigator.clipboard?.writeText(text);
+  } catch {
+    /* ignore */
+  }
+}
+
+export function BuildingInfoSheet({ building, onClose, userLocation }: Props) {
+  const [info, setInfo] = useState<BuildingEnrichment | null>(null);
   const [loading, setLoading] = useState(false);
-  const [entry, setEntry] = useState<FeedbackEntry | null>(null);
-  const [showCorrection, setShowCorrection] = useState(false);
-  const [typedName, setTypedName] = useState("");
+  const [copied, setCopied] = useState(false);
 
   useEffect(() => {
     if (!building) return;
-    const ac = new AbortController();
-    setSummary(null);
+    setInfo(null);
     setLoading(true);
-    const existing = getFeedback(building.id) ?? null;
-    setEntry(existing);
-    setShowCorrection(existing?.vote === "down");
-    setTypedName(existing?.correctName ?? "");
-    fetchWikipediaSummary(building.name, ac.signal)
-      .then((s) => setSummary(s))
-      .finally(() => setLoading(false));
-    return () => ac.abort();
+    setCopied(false);
+
+    const ac = new AbortController();
+    const timer = window.setTimeout(() => ac.abort(), FETCH_TIMEOUT_MS);
+
+    fetchBuildingInfo(
+      {
+        wikidataId: building.osmTags?.wikidata ?? null,
+        name: building.name,
+        cityHint: building.osmTags?.["addr:city"],
+      },
+      ac.signal,
+    )
+      .then((r) => setInfo(r))
+      .catch(() => setInfo(null))
+      .finally(() => {
+        window.clearTimeout(timer);
+        setLoading(false);
+      });
+
+    return () => {
+      window.clearTimeout(timer);
+      ac.abort();
+    };
   }, [building]);
 
-  /** Other buildings near the selected one — candidates for "this was the real one". */
-  const nearbyCandidates = useMemo(() => {
-    if (!building || !allBuildings?.length) return [];
-    return allBuildings
-      .filter((b) => b.id !== building.id)
-      .map((b) => ({
-        b,
-        dToSelected: distanceMeters(
-          { lat: building.lat, lng: building.lng },
-          { lat: b.lat, lng: b.lng },
-        ),
-        dToUser: userLocation
-          ? distanceMeters(userLocation, { lat: b.lat, lng: b.lng })
-          : undefined,
-      }))
-      .filter((c) => c.dToSelected < NEARBY_RADIUS_M)
-      .sort((a, b) => a.dToSelected - b.dToSelected)
-      .slice(0, NEARBY_LIMIT);
-  }, [building, allBuildings, userLocation]);
+  const tags = building?.osmTags;
+  const buildingType = useMemo(() => prettyBuildingType(tags), [tags]);
+  const address = useMemo(() => fullAddress(tags), [tags]);
 
-  const castVote = (v: Vote) => {
+  const year =
+    yearOnly(info?.yearBuilt) ?? yearOnly(tags?.start_date) ?? null;
+
+  const architect = info?.architect ?? tags?.architect ?? null;
+  const style = info?.architecturalStyle ?? null;
+
+  const distanceM = useMemo(() => {
+    if (!building || !userLocation) return null;
+    return distanceMeters(userLocation, { lat: building.lat, lng: building.lng });
+  }, [building, userLocation]);
+
+  const description: string | null = (() => {
+    if (loading) return null;
+    if (info?.description) return info.description;
+    if (tags?.description) return tags.description;
+    if (building) return constructFallback(building, buildingType, address, year);
+    return null;
+  })();
+
+  const heritage = tags?.heritage;
+  const heritageOperator = tags?.["heritage:operator"];
+
+  const osmUrl = building
+    ? `https://www.openstreetmap.org/?mlat=${building.lat}&mlon=${building.lng}&zoom=18`
+    : "";
+
+  const onReport = () => {
     if (!building) return;
-    const result = setFeedback(building.id, v, userLocation ?? undefined);
-    if (result.ts === 0) {
-      setEntry(null);
-      setShowCorrection(false);
-    } else {
-      setEntry(result);
-      if (v === "down") setShowCorrection(true);
-      else setShowCorrection(false);
-    }
+    copyFeedbackString(building);
+    setCopied(true);
+    window.setTimeout(() => setCopied(false), 2000);
   };
-
-  const pickCorrect = (id: string) => {
-    if (!building) return;
-    const next = setCorrection(building.id, {
-      correctBuildingId: id,
-      userLocation: userLocation ?? undefined,
-    });
-    setEntry(next);
-  };
-
-  const saveTypedName = () => {
-    if (!building) return;
-    const name = typedName.trim();
-    const next = setCorrection(building.id, {
-      correctName: name.length ? name : null,
-      userLocation: userLocation ?? undefined,
-    });
-    setEntry(next);
-  };
-
-  const clearAll = () => {
-    if (!building) return;
-    clearFeedback(building.id);
-    setEntry(null);
-    setShowCorrection(false);
-    setTypedName("");
-  };
-
-  const vote = entry?.vote ?? null;
-  const pickedId = entry?.correctBuildingId;
 
   return (
     <Sheet open={!!building} onOpenChange={(o) => !o && onClose()}>
@@ -121,6 +181,7 @@ export function BuildingInfoSheet({
         side="bottom"
         className="hud-glass max-h-[85vh] overflow-y-auto rounded-t-3xl border-0 px-6 pb-8 pt-6 text-foreground"
       >
+        {/* Identity */}
         <SheetHeader className="text-left">
           <div className="font-mono-hud text-[10px] text-[var(--hud-accent)]">
             STRUCTURE / SELECTED
@@ -128,164 +189,131 @@ export function BuildingInfoSheet({
           <SheetTitle className="font-display text-3xl font-semibold uppercase leading-none tracking-wide text-white">
             {building?.name}
           </SheetTitle>
+          <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 font-mono-hud text-[11px] text-white/60">
+            {buildingType && <span className="text-white/80">{buildingType}</span>}
+            {address && (
+              <span className="flex items-center gap-1">
+                <MapPin className="h-3 w-3" /> {address}
+              </span>
+            )}
+          </div>
         </SheetHeader>
 
-        <div className="mt-4 flex gap-4 font-mono-hud text-xs text-white/70">
-          {building?.heightMeters && (
-            <div>
-              <span className="text-white/40">HEIGHT </span>
-              <span className="text-white">{Math.round(building.heightMeters)}m</span>
-            </div>
+        {/* Stats strip */}
+        <div className="mt-4 grid grid-cols-2 gap-2 sm:grid-cols-4">
+          {building?.heightMeters != null && (
+            <Pill label="HEIGHT" value={`${Math.round(building.heightMeters)} m`} />
           )}
-          {building?.levels && (
-            <div>
-              <span className="text-white/40">FLOORS </span>
-              <span className="text-white">{building.levels}</span>
-            </div>
+          {building?.levels != null && <Pill label="FLOORS" value={String(building.levels)} />}
+          {year && <Pill label="BUILT" value={year} />}
+          {distanceM != null && (
+            <Pill
+              label="DISTANCE"
+              value={
+                distanceM > 1000
+                  ? `${(distanceM / 1000).toFixed(1)} km`
+                  : `${Math.round(distanceM)} m`
+              }
+            />
           )}
-          <div>
-            <span className="text-white/40">LAT </span>
-            <span className="text-white">{building?.lat.toFixed(4)}</span>
-          </div>
-          <div>
-            <span className="text-white/40">LNG </span>
-            <span className="text-white">{building?.lng.toFixed(4)}</span>
-          </div>
         </div>
 
+        {/* Description */}
         <div className="mt-5 text-sm leading-relaxed text-white/85">
-          {loading && (
+          {loading ? (
             <div className="space-y-2">
               <div className="shimmer h-3 w-full rounded bg-white/10" />
               <div className="shimmer h-3 w-11/12 rounded bg-white/10" />
               <div className="shimmer h-3 w-3/4 rounded bg-white/10" />
             </div>
-          )}
-          {!loading && summary?.extract && <p>{summary.extract}</p>}
-          {!loading && !summary && (
-            <p className="text-white/50">
-              No Wikipedia entry found for this structure.
-            </p>
+          ) : (
+            <p>{description}</p>
           )}
         </div>
 
-        {/* Accuracy feedback */}
-        <div className="mt-6 rounded-2xl border border-white/10 bg-white/5 p-3">
-          <div className="flex items-center justify-between gap-3">
-            <div className="font-mono-hud text-[10px] uppercase text-white/60">
-              Is this label correct?
-            </div>
-            <div className="flex gap-2">
-              <button
-                onClick={() => castVote("up")}
-                className={`flex items-center gap-1.5 rounded-full px-3 py-1.5 font-mono-hud text-[10px] uppercase transition ${
-                  vote === "up"
-                    ? "bg-emerald-400/20 text-emerald-300 ring-1 ring-emerald-400/50"
-                    : "bg-white/5 text-white/70 hover:bg-white/10"
-                }`}
-                aria-pressed={vote === "up"}
-              >
-                <ThumbsUp className="h-3.5 w-3.5" /> Accurate
-              </button>
-              <button
-                onClick={() => castVote("down")}
-                className={`flex items-center gap-1.5 rounded-full px-3 py-1.5 font-mono-hud text-[10px] uppercase transition ${
-                  vote === "down"
-                    ? "bg-red-400/20 text-red-300 ring-1 ring-red-400/50"
-                    : "bg-white/5 text-white/70 hover:bg-white/10"
-                }`}
-                aria-pressed={vote === "down"}
-              >
-                <ThumbsDown className="h-3.5 w-3.5" /> Wrong
-              </button>
-            </div>
+        {/* Architect / style */}
+        {(architect || style) && (
+          <div className="mt-4 flex flex-wrap items-center gap-2 font-mono-hud text-[11px] text-white/70">
+            {architect && (
+              <span>
+                Designed by <span className="text-white">{architect}</span>
+              </span>
+            )}
+            {style && (
+              <span className="rounded-full border border-white/15 bg-white/5 px-2.5 py-1 uppercase text-white/80">
+                {style}
+              </span>
+            )}
           </div>
+        )}
 
-          {/* Correction surface — shown after WRONG */}
-          {showCorrection && (
-            <div className="mt-3 space-y-3 border-t border-white/10 pt-3">
-              <div className="font-mono-hud text-[10px] uppercase text-white/50">
-                What is it actually? · Helps the labels get smarter at this spot
-              </div>
-
-              {/* Nearby pickable candidates */}
-              {nearbyCandidates.length > 0 && (
-                <div className="flex flex-wrap gap-1.5">
-                  {nearbyCandidates.map(({ b, dToSelected }) => {
-                    const picked = pickedId === b.id;
-                    return (
-                      <button
-                        key={b.id}
-                        onClick={() => pickCorrect(picked ? "" : b.id)}
-                        className={`flex items-center gap-1 rounded-full px-2.5 py-1 font-mono-hud text-[10px] transition ${
-                          picked
-                            ? "bg-[var(--hud-accent)]/25 text-[var(--hud-accent)] ring-1 ring-[var(--hud-accent)]/60"
-                            : "bg-white/5 text-white/75 hover:bg-white/10"
-                        }`}
-                      >
-                        {picked && <Check className="h-3 w-3" />}
-                        <span className="max-w-[140px] truncate">{b.name}</span>
-                        <span className="text-white/40">{Math.round(dToSelected)}m</span>
-                      </button>
-                    );
-                  })}
-                </div>
-              )}
-
-              {/* Typed-in correction */}
-              <div className="flex items-center gap-2">
-                <div className="relative flex-1">
-                  <Pencil className="pointer-events-none absolute left-2.5 top-1/2 h-3 w-3 -translate-y-1/2 text-white/40" />
-                  <input
-                    type="text"
-                    value={typedName}
-                    onChange={(e) => setTypedName(e.target.value)}
-                    onKeyDown={(e) => {
-                      if (e.key === "Enter") saveTypedName();
-                    }}
-                    placeholder="Or type the real name (e.g. Panda Express)"
-                    className="w-full rounded-full border border-white/10 bg-black/30 py-1.5 pl-7 pr-3 font-mono-hud text-[11px] text-white placeholder:text-white/30 focus:border-[var(--hud-accent)]/50 focus:outline-none"
-                  />
-                </div>
-                <button
-                  onClick={saveTypedName}
-                  disabled={typedName.trim() === (entry?.correctName ?? "")}
-                  className="rounded-full bg-[var(--hud-accent)]/20 px-3 py-1.5 font-mono-hud text-[10px] uppercase text-[var(--hud-accent)] transition hover:bg-[var(--hud-accent)]/30 disabled:opacity-30"
-                >
-                  Save
-                </button>
-              </div>
-
-              {/* Confirmation of what's been saved */}
-              {(entry?.correctName || entry?.correctBuildingId) && (
-                <div className="flex items-center justify-between gap-2 rounded-lg bg-emerald-400/5 px-3 py-2 font-mono-hud text-[10px] text-emerald-300/80">
-                  <span>
-                    Saved · this label will be demoted here next time
-                    {entry.userLat != null ? " (location attached)" : ""}.
-                  </span>
-                  <button
-                    onClick={clearAll}
-                    className="text-white/40 underline-offset-2 hover:text-white/70 hover:underline"
-                  >
-                    Undo
-                  </button>
-                </div>
-              )}
+        {/* Heritage */}
+        {heritage && (
+          <div className="mt-4 rounded-2xl border border-amber-400/30 bg-amber-400/10 px-4 py-3">
+            <div className="font-mono-hud text-[10px] uppercase tracking-wider text-amber-300">
+              Historic Structure
             </div>
-          )}
-        </div>
+            {heritageOperator && (
+              <div className="mt-0.5 font-mono-hud text-[11px] text-amber-100/80">
+                {heritageOperator}
+              </div>
+            )}
+          </div>
+        )}
 
-        {summary?.url && (
+        {/* Links */}
+        <div className="mt-5 flex flex-wrap gap-2">
           <a
-            href={summary.url}
+            href={osmUrl}
             target="_blank"
             rel="noopener noreferrer"
-            className="mt-4 inline-flex items-center gap-2 rounded-full border border-[var(--hud-accent)]/40 bg-[var(--hud-accent)]/10 px-4 py-2 font-mono-hud text-xs uppercase text-[var(--hud-accent)] transition hover:bg-[var(--hud-accent)]/20"
+            className="inline-flex items-center gap-2 rounded-full border border-white/15 bg-white/5 px-4 py-2 font-mono-hud text-xs uppercase text-white/85 transition hover:bg-white/10"
           >
-            Read more on Wikipedia <ExternalLink className="h-3 w-3" />
+            <MapPin className="h-3 w-3" /> View on OpenStreetMap
           </a>
-        )}
+          {info?.wikidataUrl && info.wikidataId && (
+            <a
+              href={info.wikidataUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center gap-2 rounded-full border border-white/15 bg-white/5 px-4 py-2 font-mono-hud text-xs uppercase text-white/85 transition hover:bg-white/10"
+            >
+              <Database className="h-3 w-3" /> Wikidata
+            </a>
+          )}
+          {info?.wikipediaUrl && (
+            <a
+              href={info.wikipediaUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center gap-2 rounded-full border border-[var(--hud-accent)]/40 bg-[var(--hud-accent)]/10 px-4 py-2 font-mono-hud text-xs uppercase text-[var(--hud-accent)] transition hover:bg-[var(--hud-accent)]/20"
+            >
+              Wikipedia <ExternalLink className="h-3 w-3" />
+            </a>
+          )}
+        </div>
+
+        {/* Report incorrect label — single small text link */}
+        <div className="mt-5 text-right">
+          <button
+            onClick={onReport}
+            className="font-mono-hud text-[10px] uppercase text-white/40 underline-offset-2 transition hover:text-white/70 hover:underline"
+          >
+            {copied ? "Copied report to clipboard" : "Report incorrect label"}
+          </button>
+        </div>
       </SheetContent>
     </Sheet>
+  );
+}
+
+function Pill({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="rounded-xl border border-white/10 bg-white/5 px-3 py-2">
+      <div className="font-mono-hud text-[9px] uppercase tracking-wider text-white/40">
+        {label}
+      </div>
+      <div className="font-mono-hud text-sm text-white">{value}</div>
+    </div>
   );
 }
