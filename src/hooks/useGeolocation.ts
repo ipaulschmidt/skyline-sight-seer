@@ -13,7 +13,7 @@ export interface GeoState {
   refreshing: boolean;
 }
 
-const SOFT_TIMEOUT_MS = 12000;
+const SOFT_TIMEOUT_MS = 45000;
 
 export function useGeolocation(enabled: boolean) {
   const [state, setState] = useState<GeoState>({
