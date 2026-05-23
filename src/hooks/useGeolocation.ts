@@ -17,6 +17,8 @@ export function useGeolocation(enabled: boolean) {
   const [state, setState] = useState<GeoState>({
     position: null,
     accuracy: null,
+    altitude: null,
+    altitudeAccuracy: null,
     error: null,
     loading: enabled,
     timedOut: false,
@@ -29,6 +31,8 @@ export function useGeolocation(enabled: boolean) {
       setState({
         position: null,
         accuracy: null,
+        altitude: null,
+        altitudeAccuracy: null,
         error: "Geolocation not supported in this browser",
         loading: false,
         timedOut: false,
@@ -56,6 +60,8 @@ export function useGeolocation(enabled: boolean) {
         setState({
           position: { lat: pos.coords.latitude, lng: pos.coords.longitude },
           accuracy: pos.coords.accuracy ?? null,
+          altitude: pos.coords.altitude ?? null,
+          altitudeAccuracy: pos.coords.altitudeAccuracy ?? null,
           error: null,
           loading: false,
           timedOut: false,
