@@ -1,4 +1,4 @@
-import { useMemo } from "react";
+import { useMemo, useRef, useState } from "react";
 import { angularDelta, bearingDeg, distanceMeters, type LatLng } from "@/lib/geo";
 import type { BuildingFeature } from "@/lib/overpass";
 import { getAllFeedback } from "@/lib/feedback";
@@ -13,6 +13,10 @@ interface Props {
   onSelect: (b: BuildingFeature) => void;
   /** Tap on empty area returns the bearing offset (deg) the user tapped. */
   onTapBearing?: (bearingOffsetDeg: number) => void;
+  /** Horizontal drag to nudge compass offset (deg, signed). Called live while dragging. */
+  onNudgeDelta?: (deltaDeg: number) => void;
+  /** Called once at the end of a nudge gesture (for persistence). */
+  onNudgeEnd?: () => void;
   minHeightMeters?: number;
   maxMarkers?: number;
 }
