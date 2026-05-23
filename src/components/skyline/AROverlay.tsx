@@ -15,6 +15,8 @@ interface Props {
   onTapBearing?: (bearingOffsetDeg: number) => void;
   minHeightMeters?: number;
   maxMarkers?: number;
+  /** Viewer eye height above local ground in meters (floor height etc). */
+  viewerHeightMeters?: number;
 }
 
 interface Projected {
