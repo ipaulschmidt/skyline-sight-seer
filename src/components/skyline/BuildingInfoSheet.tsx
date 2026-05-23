@@ -4,6 +4,7 @@ import type { BuildingFeature } from "@/lib/overpass";
 import { fetchBuildingInfo, type BuildingEnrichment } from "@/lib/wikipedia";
 import { ExternalLink, MapPin, Database } from "lucide-react";
 import { distanceMeters, type LatLng } from "@/lib/geo";
+import type { ReverseGeocodeResult } from "@/lib/reverseGeocode";
 
 interface Props {
   building: BuildingFeature | null;
@@ -11,7 +12,16 @@ interface Props {
   userLocation?: LatLng | null;
   /** Unused now — kept for prop compatibility with the page. */
   allBuildings?: BuildingFeature[];
+  /**
+   * Lightweight identification result from a tap on an unlabeled spot. When
+   * provided (and `building` is null), the sheet renders the amber-tagged
+   * "identified by location" mode instead of the normal building info view.
+   */
+  locationResult?:
+    | (ReverseGeocodeResult & { distanceMeters: number; bearingDeg: number })
+    | null;
 }
+
 
 const FETCH_TIMEOUT_MS = 4000;
 
