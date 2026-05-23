@@ -1,6 +1,8 @@
 import { useMemo } from "react";
 import { angularDelta, bearingDeg, distanceMeters, type LatLng } from "@/lib/geo";
 import type { BuildingFeature } from "@/lib/overpass";
+import { getAllFeedback } from "@/lib/feedback";
+import { ThumbsUp, ThumbsDown } from "lucide-react";
 
 interface Props {
   user: LatLng;
@@ -9,9 +11,9 @@ interface Props {
   fovDeg?: number;
   selectedId: string | null;
   onSelect: (b: BuildingFeature) => void;
-  /** Minimum building height (m) to render. Default 40m (~12 floors). */
+  /** Tap on empty area returns the bearing offset (deg) the user tapped. */
+  onTapBearing?: (bearingOffsetDeg: number) => void;
   minHeightMeters?: number;
-  /** Max simultaneous markers in view. Default 14. */
   maxMarkers?: number;
 }
 
@@ -22,7 +24,7 @@ interface Projected {
   xPct: number;
   scale: number;
   score: number;
-  lane: number; // 0..3 vertical lane for label stagger
+  lane: number;
 }
 
 export function AROverlay({
@@ -32,9 +34,12 @@ export function AROverlay({
   fovDeg = 60,
   selectedId,
   onSelect,
+  onTapBearing,
   minHeightMeters = 40,
   maxMarkers = 14,
 }: Props) {
+  const feedback = useMemo(() => getAllFeedback(), [selectedId]);
+
   const projected = useMemo<Projected[]>(() => {
     const half = fovDeg / 2;
     const candidates: Omit<Projected, "lane">[] = [];
@@ -43,8 +48,12 @@ export function AROverlay({
       const dist = distanceMeters(user, { lat: b.lat, lng: b.lng });
       if (dist < 30 || dist > 5000) continue;
 
-      // Distance-scaled notability: distant buildings must be much taller.
-      const requiredHeight = Math.max(minHeightMeters, 25 + (dist / 1000) * 25);
+      // Loosen height filter when zoomed in (narrow FOV) — user wants detail.
+      const zoomFactor = fovDeg / 60; // 1 at normal, 0.3 at strong zoom
+      const requiredHeight = Math.max(
+        minHeightMeters * Math.max(0.5, zoomFactor),
+        (25 + (dist / 1000) * 25) * Math.max(0.5, zoomFactor),
+      );
       if (h < requiredHeight) continue;
 
       const brng = bearingDeg(user, { lat: b.lat, lng: b.lng });
@@ -57,17 +66,16 @@ export function AROverlay({
       candidates.push({ b, delta, distance: dist, xPct, scale, score });
     }
 
-    // Cluster: drop markers within ~4° bearing of a more notable neighbor.
     candidates.sort((a, b) => b.score - a.score);
     const kept: Omit<Projected, "lane">[] = [];
-    const minSeparationDeg = 4;
+    // Separation scales with FOV: stay 4° apart at normal zoom, tighter when zoomed in
+    const minSeparationDeg = Math.max(1.5, 4 * (fovDeg / 60));
     for (const c of candidates) {
       if (kept.length >= maxMarkers) break;
       if (kept.some((k) => Math.abs(k.delta - c.delta) < minSeparationDeg)) continue;
       kept.push(c);
     }
 
-    // Stagger lanes left-to-right by bearing
     const byBearing = [...kept].sort((a, b) => a.delta - b.delta);
     const lanes = new Map<string, number>();
     byBearing.forEach((k, i) => lanes.set(k.b.id, i % 4));
@@ -77,12 +85,35 @@ export function AROverlay({
       .sort((a, b) => b.distance - a.distance);
   }, [user, heading, buildings, fovDeg, minHeightMeters, maxMarkers]);
 
+  const handleTap = (e: React.MouseEvent<HTMLDivElement>) => {
+    if (!onTapBearing) return;
+    const rect = e.currentTarget.getBoundingClientRect();
+    const xPct = ((e.clientX - rect.left) / rect.width) * 100;
+    const half = fovDeg / 2;
+    const offset = ((xPct - 50) / 50) * half;
+    onTapBearing(offset);
+  };
+
   return (
-    <div className="pointer-events-none absolute inset-0 overflow-hidden">
-      <div className="absolute left-0 right-0 top-1/2 h-px bg-white/10" />
+    <div
+      className="absolute inset-0 overflow-hidden"
+      onClick={handleTap}
+      style={{ cursor: onTapBearing ? "crosshair" : "default" }}
+    >
+      <div className="pointer-events-none absolute left-0 right-0 top-1/2 h-px bg-white/10" />
+
+      {/* Reticle when tap-to-label is active */}
+      {onTapBearing && (
+        <div className="pointer-events-none absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 opacity-40">
+          <div className="h-8 w-8 rounded-full border border-[var(--hud-accent)]" />
+          <div className="absolute left-1/2 top-1/2 h-3 w-px -translate-x-1/2 -translate-y-1/2 bg-[var(--hud-accent)]" />
+          <div className="absolute left-1/2 top-1/2 h-px w-3 -translate-x-1/2 -translate-y-1/2 bg-[var(--hud-accent)]" />
+        </div>
+      )}
 
       {projected.map((p) => {
         const selected = p.b.id === selectedId;
+        const vote = feedback[p.b.id]?.vote;
         const heightLabel = p.b.heightMeters
           ? `${Math.round(p.b.heightMeters)}m${p.b.levels ? ` · ${p.b.levels}fl` : ""}`
           : p.b.levels
@@ -92,8 +123,13 @@ export function AROverlay({
           p.distance > 1000
             ? `${(p.distance / 1000).toFixed(1)}km`
             : `${Math.round(p.distance)}m`;
-        // Lane offsets (top %): 4 staggered vertical lanes in top half
         const laneTop = [8, 18, 28, 38][p.lane];
+        const voteClass =
+          vote === "up"
+            ? "ring-1 ring-emerald-400/60"
+            : vote === "down"
+              ? "ring-1 ring-red-400/60 opacity-60"
+              : "";
         return (
           <div
             key={p.b.id}
@@ -108,17 +144,26 @@ export function AROverlay({
           >
             <button
               type="button"
-              onClick={() => onSelect(p.b)}
-              className={`pointer-events-auto hud-pill rounded-full px-2.5 py-1 text-left transition-all ${
-                selected ? "ring-2 ring-[var(--hud-accent)] shadow-[0_0_20px_rgba(0,191,255,0.5)] z-10" : ""
+              onClick={(e) => {
+                e.stopPropagation();
+                onSelect(p.b);
+              }}
+              className={`pointer-events-auto hud-pill rounded-full px-2.5 py-1 text-left transition-all ${voteClass} ${
+                selected
+                  ? "ring-2 ring-[var(--hud-accent)] shadow-[0_0_20px_rgba(0,191,255,0.5)] z-10"
+                  : ""
               }`}
             >
-              <div
-                className={`font-display text-xs font-semibold leading-tight whitespace-nowrap ${
-                  selected ? "text-[var(--hud-accent)]" : "text-white"
-                }`}
-              >
-                {p.b.name}
+              <div className="flex items-center gap-1.5">
+                <div
+                  className={`font-display text-xs font-semibold leading-tight whitespace-nowrap ${
+                    selected ? "text-[var(--hud-accent)]" : "text-white"
+                  }`}
+                >
+                  {p.b.name}
+                </div>
+                {vote === "up" && <ThumbsUp className="h-3 w-3 text-emerald-400" />}
+                {vote === "down" && <ThumbsDown className="h-3 w-3 text-red-400" />}
               </div>
               <div className="font-mono-hud text-[9px] text-white/60 whitespace-nowrap">
                 {heightLabel} · {distLabel}
@@ -137,4 +182,31 @@ export function AROverlay({
       })}
     </div>
   );
+}
+
+/**
+ * Pick the best-matching building for a tap at the given bearing offset.
+ * Prefers buildings near the tap bearing, weighted by notability (height/√distance).
+ */
+export function pickBuildingAtBearing(
+  user: LatLng,
+  heading: number,
+  bearingOffsetDeg: number,
+  buildings: BuildingFeature[],
+  toleranceDeg = 5,
+): BuildingFeature | null {
+  const targetBearing = (heading + bearingOffsetDeg + 360) % 360;
+  let best: { b: BuildingFeature; score: number } | null = null;
+  for (const b of buildings) {
+    const dist = distanceMeters(user, { lat: b.lat, lng: b.lng });
+    if (dist < 30 || dist > 5000) continue;
+    const brng = bearingDeg(user, { lat: b.lat, lng: b.lng });
+    const delta = Math.abs(angularDelta(targetBearing, brng));
+    if (delta > toleranceDeg) continue;
+    const h = b.heightMeters ?? (b.levels ? b.levels * 3.2 : 10);
+    // Tighter bearing wins; ties broken by notability
+    const score = (toleranceDeg - delta) * 100 + h / Math.sqrt(dist);
+    if (!best || score > best.score) best = { b, score };
+  }
+  return best?.b ?? null;
 }
