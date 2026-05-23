@@ -22,7 +22,12 @@ import {
   saveCompassOffset,
   applyCompassOffset,
 } from "@/components/skyline/CompassCalibration";
-import { Loader2, Smartphone, RotateCw, Download, MapPin, CheckCircle2, RefreshCw, ZoomIn, ZoomOut, Crosshair, Compass, Building2, LocateFixed } from "lucide-react";
+import {
+  FOVCalibration,
+  hasFovCalibration,
+  loadFovDegrees,
+} from "@/components/skyline/FOVCalibration";
+import { Loader2, Smartphone, RotateCw, Download, MapPin, CheckCircle2, RefreshCw, ZoomIn, ZoomOut, Crosshair, Compass, Building2, LocateFixed, Scan } from "lucide-react";
 
 const FLOOR_HEIGHT_M = 3.5;
 const EYE_OFFSET_M = 1.6;
@@ -52,21 +57,24 @@ function SkylineARPage() {
   const [calibratedThisSession, setCalibratedThisSession] = useState(false);
   const [floor, setFloor] = useState<number>(0); // 0 = ground; user-set override
   const [showFloorPicker, setShowFloorPicker] = useState(false);
+  const [showFovCalibration, setShowFovCalibration] = useState(false);
+  const [fovDeg, setFovDeg] = useState<number>(60);
 
   const mobile = useMemo(isMobile, []);
 
   const { videoRef, error: camError, ready: camReady } = useCamera(started && !demoMode);
-  const orientation = useDeviceOrientation();
   const geo = useGeolocation(started && !demoMode);
+  const orientation = useDeviceOrientation(demoMode ? null : geo.position);
 
   const userPos = demoMode ? demoCity : geo.position;
   const rawHeading = demoMode ? demoHeading : orientation.heading;
   // Apply calibration offset (skip in demo mode — slider is the source of truth).
   const heading = demoMode ? rawHeading : applyCompassOffset(rawHeading, compassOffset);
 
-  // Load saved offset + floor on mount
+  // Load saved offset + floor + FOV on mount
   useEffect(() => {
     setCompassOffset(loadCompassOffset());
+    setFovDeg(loadFovDegrees());
     if (typeof window !== "undefined") {
       const saved = window.localStorage.getItem(FLOOR_STORAGE_KEY);
       if (saved != null) {
@@ -97,10 +105,18 @@ function SkylineARPage() {
   useEffect(() => {
     if (demoMode || calibratedThisSession) return;
     if (orientation.heading == null) return;
-    // Only auto-open if user has never calibrated before
     const hasPrior = typeof window !== "undefined" && window.localStorage.getItem("skyline.compass.offset") !== null;
     if (!hasPrior) setShowCalibration(true);
   }, [orientation.heading, demoMode, calibratedThisSession]);
+
+  // After compass calibration completes, prompt for FOV calibration if missing.
+  useEffect(() => {
+    if (demoMode) return;
+    if (!calibratedThisSession) return;
+    if (showCalibration) return;
+    if (hasFovCalibration()) return;
+    setShowFovCalibration(true);
+  }, [calibratedThisSession, demoMode, showCalibration]);
 
   const handleStart = async () => {
     setStarted(true);
@@ -230,14 +246,15 @@ function SkylineARPage() {
           user={userPos}
           heading={heading}
           buildings={buildings}
-          fovDeg={60 / zoom}
+          fovDeg={fovDeg / zoom}
+          tiltDeg={demoMode ? 0 : orientation.tiltDeg ?? 0}
           viewerHeightMeters={viewerHeightMeters}
           selectedId={selected?.id ?? null}
           onSelect={(b) => setSelected(b)}
           onTapBearing={
             tapMode
               ? (offset) => {
-                  const tol = Math.max(3, (60 / zoom) * 0.13);
+                  const tol = Math.max(3, (fovDeg / zoom) * 0.13);
                   const hit = pickBuildingAtBearing(
                     userPos,
                     heading,
@@ -300,6 +317,19 @@ function SkylineARPage() {
               title={compassOffset !== 0 ? `Offset ${compassOffset > 0 ? "+" : ""}${compassOffset}°` : "Calibrate compass"}
             >
               <Compass className="h-4 w-4" />
+            </button>
+          )}
+          {!demoMode && (
+            <button
+              onClick={() => setShowFovCalibration(true)}
+              className="hud-pill flex h-10 w-10 flex-col items-center justify-center rounded-full"
+              aria-label="Calibrate camera field of view"
+              title={`Calibrate FOV · ${Math.round(fovDeg)}°`}
+            >
+              <Scan className="h-4 w-4" />
+              <span className="font-mono-hud text-[8px] leading-none mt-0.5">
+                {Math.round(fovDeg)}°
+              </span>
             </button>
           )}
           <button
@@ -431,6 +461,17 @@ function SkylineARPage() {
             setShowCalibration(false);
             setCalibratedThisSession(true);
           }}
+        />
+      )}
+
+      {showFovCalibration && !demoMode && (
+        <FOVCalibration
+          heading={heading}
+          onComplete={(derived) => {
+            setFovDeg(derived);
+            setShowFovCalibration(false);
+          }}
+          onCancel={() => setShowFovCalibration(false)}
         />
       )}
 
