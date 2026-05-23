@@ -1,4 +1,4 @@
-import { useMemo, useRef } from "react";
+import { useMemo, useRef, useState } from "react";
 import { angularDelta, bearingDeg, distanceMeters, type LatLng } from "@/lib/geo";
 import type { BuildingFeature } from "@/lib/overpass";
 import {
@@ -8,6 +8,7 @@ import {
 } from "@/lib/feedback";
 import { loadFovDegrees } from "./FOVCalibration";
 import { ThumbsUp, ThumbsDown, ChevronRight } from "lucide-react";
+
 
 interface Props {
   user: LatLng;
