@@ -12,11 +12,11 @@ import {
   type LoadStatus,
 } from "@/lib/overpass";
 import type { LatLng } from "@/lib/geo";
-import { AROverlay } from "@/components/skyline/AROverlay";
+import { AROverlay, pickBuildingAtBearing } from "@/components/skyline/AROverlay";
 import { CompassHUD } from "@/components/skyline/CompassHUD";
 import { BuildingInfoSheet } from "@/components/skyline/BuildingInfoSheet";
 import { PermissionGate } from "@/components/skyline/PermissionGate";
-import { Loader2, Smartphone, RotateCw, Download, MapPin, CheckCircle2, RefreshCw } from "lucide-react";
+import { Loader2, Smartphone, RotateCw, Download, MapPin, CheckCircle2, RefreshCw, ZoomIn, ZoomOut, Crosshair } from "lucide-react";
 
 export const Route = createFileRoute("/")({
   component: SkylineARPage,
