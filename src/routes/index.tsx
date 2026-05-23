@@ -59,17 +59,16 @@ function SkylineARPage() {
   const heading = demoMode ? rawHeading : applyCompassOffset(rawHeading, compassOffset);
 
   // Load saved offset on mount
-  const offsetLoaded = useState(false);
+  const offsetLoaded = useRef(false);
   useEffect(() => {
     setCompassOffset(loadCompassOffset());
-    offsetLoaded[1](true);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    offsetLoaded.current = true;
   }, []);
   // Persist compass offset whenever it changes (after initial load)
   useEffect(() => {
-    if (!offsetLoaded[0]) return;
+    if (!offsetLoaded.current) return;
     saveCompassOffset(compassOffset);
-  }, [compassOffset, offsetLoaded]);
+  }, [compassOffset]);
 
   // First-time calibration: when heading first becomes available on mobile and
   // we have no prior calibration this session, prompt the user.
