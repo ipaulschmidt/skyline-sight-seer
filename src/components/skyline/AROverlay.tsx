@@ -92,6 +92,7 @@ export function AROverlay({
     const pre: Pre[] = [];
     const heightRelief = Math.min(1, eye / 60);
     for (const b of buildings) {
+      if (b.unnamed) continue; // tap-only targets, not auto-labelled
       const h = b.heightMeters ?? (b.levels ? b.levels * 3.2 : 0);
       const dist = distanceMeters(user, { lat: b.lat, lng: b.lng });
       if (dist < 30 || dist > maxDist) continue;
@@ -138,7 +139,7 @@ export function AROverlay({
       // (elevationDeg > tiltDeg) should sit above center.
       let yPct = 50 - ((elevationDeg - tiltDeg) / halfV) * 50;
       yPct = Math.max(5, Math.min(85, yPct));
-      const scale = Math.max(0.7, Math.min(1.1, 1.15 - p.distance / 6000));
+      const scale = Math.max(0.88, Math.min(1.0, 1.05 - p.distance / 8000));
       const baseScore =
         p.h / Math.sqrt(Math.max(p.distance, 1)) + (50 / Math.max(p.distance, 50)) * 1000;
       const score =
@@ -327,16 +328,18 @@ export function AROverlay({
                   e.stopPropagation();
                   onSelect(p.b);
                 }}
-                className={`pointer-events-auto hud-pill rounded-full px-2.5 py-1 text-left transition-all ${voteClass} ${dimWhenOverlapped} ${
+                className={`pointer-events-auto hud-pill rounded-full transition-all ${voteClass} ${dimWhenOverlapped} ${
                   selected
-                    ? "ring-2 ring-[var(--hud-accent)] shadow-[0_0_20px_rgba(0,191,255,0.5)]"
-                    : ""
+                    ? "px-3 py-1.5 ring-2 ring-[var(--hud-accent)] shadow-[0_0_20px_rgba(0,191,255,0.5)] bg-black/80"
+                    : "px-2.5 py-1"
                 }`}
               >
                 <div className="flex items-center gap-1.5">
                   <div
-                    className={`font-display text-xs font-semibold leading-tight whitespace-nowrap ${
-                      selected ? "text-[var(--hud-accent)]" : "text-white"
+                    className={`font-display font-semibold leading-tight whitespace-nowrap ${
+                      selected
+                        ? "text-[13px] text-[var(--hud-accent)]"
+                        : "text-[11px] text-white"
                     }`}
                   >
                     {p.b.name}
@@ -344,7 +347,11 @@ export function AROverlay({
                   {vote === "up" && <ThumbsUp className="h-3 w-3 text-emerald-400" />}
                   {vote === "down" && <ThumbsDown className="h-3 w-3 text-red-400" />}
                 </div>
-                <div className="font-mono-hud text-[9px] text-white/60 whitespace-nowrap">
+                <div
+                  className={`font-mono-hud whitespace-nowrap ${
+                    selected ? "text-[11px] text-white/85 mt-0.5" : "text-[9px] text-white/60"
+                  }`}
+                >
                   {heightLabel} · {distLabel}
                 </div>
               </button>

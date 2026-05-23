@@ -9,6 +9,8 @@ export interface BuildingFeature {
   levels?: number;
   /** Raw OSM tags retained for the info sheet (architect, year, address, wikidata, etc.). */
   osmTags?: Record<string, string>;
+  /** True if this building has no real name in OSM. Excluded from auto AR labels but still tappable. */
+  unnamed?: boolean;
 }
 
 /** Tags we surface in the info sheet. Anything not in this list is dropped to keep the cache small. */
@@ -53,7 +55,7 @@ const OVERPASS_MIRRORS = [
   "https://overpass.private.coffee/api/interpreter",
 ];
 
-const CACHE_VERSION = "v3";
+const CACHE_VERSION = "v4";
 const CACHE_TTL_MS = 1000 * 60 * 60 * 24 * 30; // 30 days
 
 function parseHeight(tag?: string): number | undefined {
@@ -117,10 +119,10 @@ export function listCachedPacks(): { key: string; pack: CachedPack }[] {
 }
 
 function buildQuery(user: LatLng, radiusMeters: number): string {
-  // Pull buildings that have ANY identifying tag — name, brand, operator,
-  // an address, or a recognizable use (shop/amenity/tourism/office). This
-  // catches landmarks like "Harley-Davidson Honolulu" that lack a `name`
-  // tag but do have `shop` or `brand`. Falls back to address when needed.
+  // Pull buildings with any identifying tag (name, brand, operator, address,
+  // shop/amenity/etc.). Also pull substantial unnamed buildings (8+ floors or
+  // any building with a height tag) so they can still be tapped — they get
+  // a placeholder name and are excluded from the auto AR labels.
   const a = `around:${radiusMeters},${user.lat},${user.lng}`;
   return `
     [out:json][timeout:25];
@@ -135,6 +137,8 @@ function buildQuery(user: LatLng, radiusMeters: number): string {
       way["building"]["office"](${a});
       way["building"]["addr:housename"](${a});
       way["building"]["addr:housenumber"](${a});
+      way["building"]["height"](${a});
+      way["building"]["building:levels"~"^([89]|[1-9][0-9])$"](${a});
     );
     out center tags;
   `;
@@ -256,8 +260,7 @@ function normalize(elements: OverpassElement[]): BuildingFeature[] {
   const out: BuildingFeature[] = [];
   for (const el of elements) {
     const tags = el.tags ?? {};
-    const name = deriveName(tags);
-    if (!name) continue;
+    const named = deriveName(tags);
     const lat = el.lat ?? el.center?.lat;
     const lng = el.lon ?? el.center?.lon;
     if (lat == null || lng == null) continue;
@@ -265,6 +268,22 @@ function normalize(elements: OverpassElement[]): BuildingFeature[] {
     const levels = tags["building:levels"]
       ? parseInt(tags["building:levels"], 10)
       : undefined;
+
+    // Allow unnamed buildings through if they're substantial — gives us
+    // tap targets for towers OSM hasn't labeled yet.
+    let name = named;
+    let unnamed = false;
+    if (!name) {
+      const tall =
+        (heightMeters != null && heightMeters >= 25) ||
+        (levels != null && levels >= 8);
+      if (!tall) continue;
+      const kind = tags.building && tags.building !== "yes" ? tags.building : "Building";
+      const pretty = kind.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
+      name = levels ? `${pretty} · ${levels} fl` : `${pretty}`;
+      unnamed = true;
+    }
+
     const key = name + "|" + lat.toFixed(4) + "|" + lng.toFixed(4);
     if (seen.has(key)) continue;
     seen.add(key);
@@ -284,6 +303,7 @@ function normalize(elements: OverpassElement[]): BuildingFeature[] {
       heightMeters: heightMeters ?? (levels ? levels * 3.2 : undefined),
       levels,
       osmTags: Object.keys(osmTags).length ? osmTags : undefined,
+      unnamed: unnamed || undefined,
     });
   }
   // Prefer taller / more notable buildings first, but keep up to 1200 so

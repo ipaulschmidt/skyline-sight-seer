@@ -71,7 +71,7 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
   head: () => ({
     meta: [
       { charSet: "utf-8" },
-      { name: "viewport", content: "width=device-width, initial-scale=1" },
+      { name: "viewport", content: "width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" },
       { title: "SkylineAR — AR City Skyline Viewer" },
       { name: "description", content: "Point your phone at the skyline and see labeled buildings in augmented reality." },
       { name: "author", content: "SkylineAR" },
