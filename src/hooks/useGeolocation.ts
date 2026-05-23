@@ -4,6 +4,8 @@ import type { LatLng } from "@/lib/geo";
 export interface GeoState {
   position: LatLng | null;
   accuracy: number | null;
+  altitude: number | null;
+  altitudeAccuracy: number | null;
   error: string | null;
   loading: boolean;
   timedOut: boolean;
