@@ -254,7 +254,7 @@ function SkylineARPage() {
           onTapBearing={
             tapMode
               ? (offset) => {
-                  const tol = Math.max(3, (60 / zoom) * 0.13);
+                  const tol = Math.max(3, (fovDeg / zoom) * 0.13);
                   const hit = pickBuildingAtBearing(
                     userPos,
                     heading,
