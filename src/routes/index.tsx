@@ -97,17 +97,22 @@ function SkylineARPage() {
 
   return (
     <main className="fixed inset-0 overflow-hidden bg-black text-white">
-      {/* Camera feed */}
+      {/* Camera feed (digital zoom via CSS transform) */}
       {!demoMode && (
         <video
           ref={videoRef}
           autoPlay
           playsInline
           muted
-          className="absolute inset-0 h-full w-full object-cover"
+          className="absolute inset-0 h-full w-full object-cover transition-transform duration-200"
+          style={{ transform: `scale(${zoom})`, transformOrigin: "center center" }}
         />
       )}
-      {demoMode && <DemoBackdrop />}
+      {demoMode && (
+        <div style={{ transform: `scale(${zoom})`, transformOrigin: "center center" }} className="absolute inset-0 transition-transform duration-200">
+          <DemoBackdrop />
+        </div>
+      )}
 
       {/* Vignette */}
       <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_at_center,transparent_40%,rgba(0,0,0,0.7)_100%)]" />
