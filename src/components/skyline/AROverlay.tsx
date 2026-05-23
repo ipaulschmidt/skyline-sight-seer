@@ -1,4 +1,4 @@
-import { useMemo } from "react";
+import { useMemo, useRef, useState } from "react";
 import { angularDelta, bearingDeg, distanceMeters, type LatLng } from "@/lib/geo";
 import type { BuildingFeature } from "@/lib/overpass";
 import { getAllFeedback } from "@/lib/feedback";
@@ -13,6 +13,10 @@ interface Props {
   onSelect: (b: BuildingFeature) => void;
   /** Tap on empty area returns the bearing offset (deg) the user tapped. */
   onTapBearing?: (bearingOffsetDeg: number) => void;
+  /** Horizontal drag to nudge compass offset (deg, signed). Called live while dragging. */
+  onNudgeDelta?: (deltaDeg: number) => void;
+  /** Called once at the end of a nudge gesture (for persistence). */
+  onNudgeEnd?: () => void;
   minHeightMeters?: number;
   maxMarkers?: number;
 }
@@ -35,10 +39,14 @@ export function AROverlay({
   selectedId,
   onSelect,
   onTapBearing,
+  onNudgeDelta,
+  onNudgeEnd,
   minHeightMeters = 40,
   maxMarkers = 14,
 }: Props) {
   const feedback = useMemo(() => getAllFeedback(), [selectedId]);
+  const dragRef = useRef<{ x: number; y: number; lastX: number; dragging: boolean; width: number } | null>(null);
+  const [nudging, setNudging] = useState(false);
 
   const projected = useMemo<Projected[]>(() => {
     const half = fovDeg / 2;
@@ -119,7 +127,51 @@ export function AROverlay({
       .sort((a, b) => b.distance - a.distance);
   }, [user, heading, buildings, fovDeg, minHeightMeters, maxMarkers]);
 
-  const handleTap = (e: React.MouseEvent<HTMLDivElement>) => {
+  const DRAG_THRESHOLD_PX = 8;
+
+  const handlePointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
+    const rect = e.currentTarget.getBoundingClientRect();
+    dragRef.current = {
+      x: e.clientX,
+      y: e.clientY,
+      lastX: e.clientX,
+      dragging: false,
+      width: rect.width,
+    };
+    (e.currentTarget as Element).setPointerCapture?.(e.pointerId);
+  };
+
+  const handlePointerMove = (e: React.PointerEvent<HTMLDivElement>) => {
+    const d = dragRef.current;
+    if (!d || !onNudgeDelta) return;
+    const dx = e.clientX - d.x;
+    const dy = e.clientY - d.y;
+    if (!d.dragging) {
+      // Require mostly-horizontal movement past threshold
+      if (Math.abs(dx) > DRAG_THRESHOLD_PX && Math.abs(dx) > Math.abs(dy)) {
+        d.dragging = true;
+        setNudging(true);
+      } else {
+        return;
+      }
+    }
+    const incPx = e.clientX - d.lastX;
+    d.lastX = e.clientX;
+    // Drag labels right → world bearing shifts left → decrease offset
+    const incDeg = -(incPx / d.width) * fovDeg;
+    onNudgeDelta(incDeg);
+  };
+
+  const handlePointerUp = (e: React.PointerEvent<HTMLDivElement>) => {
+    const d = dragRef.current;
+    dragRef.current = null;
+    if (!d) return;
+    if (d.dragging) {
+      setNudging(false);
+      onNudgeEnd?.();
+      return;
+    }
+    // Treat as tap
     if (!onTapBearing) return;
     const rect = e.currentTarget.getBoundingClientRect();
     const xPct = ((e.clientX - rect.left) / rect.width) * 100;
@@ -128,13 +180,30 @@ export function AROverlay({
     onTapBearing(offset);
   };
 
+  const cursor = nudging
+    ? "grabbing"
+    : onTapBearing
+      ? "crosshair"
+      : onNudgeDelta
+        ? "grab"
+        : "default";
+
   return (
     <div
-      className="absolute inset-0 overflow-hidden"
-      onClick={handleTap}
-      style={{ cursor: onTapBearing ? "crosshair" : "default" }}
+      className="absolute inset-0 overflow-hidden touch-none"
+      onPointerDown={handlePointerDown}
+      onPointerMove={handlePointerMove}
+      onPointerUp={handlePointerUp}
+      onPointerCancel={handlePointerUp}
+      style={{ cursor }}
     >
       <div className="pointer-events-none absolute left-0 right-0 top-1/2 h-px bg-white/10" />
+
+      {nudging && (
+        <div className="pointer-events-none absolute left-1/2 top-28 z-20 -translate-x-1/2 hud-pill rounded-full px-3 py-1.5 font-mono-hud text-[10px] uppercase text-[var(--hud-accent)]">
+          Nudging compass · release to save
+        </div>
+      )}
 
       {/* Reticle when tap-to-label is active */}
       {onTapBearing && (
