@@ -16,7 +16,13 @@ import { AROverlay, pickBuildingAtBearing } from "@/components/skyline/AROverlay
 import { CompassHUD } from "@/components/skyline/CompassHUD";
 import { BuildingInfoSheet } from "@/components/skyline/BuildingInfoSheet";
 import { PermissionGate } from "@/components/skyline/PermissionGate";
-import { Loader2, Smartphone, RotateCw, Download, MapPin, CheckCircle2, RefreshCw, ZoomIn, ZoomOut, Crosshair } from "lucide-react";
+import {
+  CompassCalibration,
+  loadCompassOffset,
+  saveCompassOffset,
+  applyCompassOffset,
+} from "@/components/skyline/CompassCalibration";
+import { Loader2, Smartphone, RotateCw, Download, MapPin, CheckCircle2, RefreshCw, ZoomIn, ZoomOut, Crosshair, Compass } from "lucide-react";
 
 export const Route = createFileRoute("/")({
   component: SkylineARPage,
