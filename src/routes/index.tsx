@@ -56,12 +56,13 @@ function SkylineARPage() {
   const [calibratedThisSession, setCalibratedThisSession] = useState(false);
   const [floor, setFloor] = useState<number>(0); // 0 = ground; user-set override
   const [showFloorPicker, setShowFloorPicker] = useState(false);
+  const [showFovCalibration, setShowFovCalibration] = useState(false);
 
   const mobile = useMemo(isMobile, []);
 
   const { videoRef, error: camError, ready: camReady } = useCamera(started && !demoMode);
-  const orientation = useDeviceOrientation();
   const geo = useGeolocation(started && !demoMode);
+  const orientation = useDeviceOrientation(demoMode ? null : geo.position);
 
   const userPos = demoMode ? demoCity : geo.position;
   const rawHeading = demoMode ? demoHeading : orientation.heading;
