@@ -200,12 +200,34 @@ export async function loadAreaPack(
   throw new Error(lastErr || "All Overpass mirrors failed");
 }
 
+function deriveName(tags: Record<string, string>): string | null {
+  const direct =
+    tags.name ||
+    tags["name:en"] ||
+    tags.brand ||
+    tags.operator ||
+    tags["addr:housename"];
+  if (direct) return direct;
+  // Synthesize from address
+  const hn = tags["addr:housenumber"];
+  const street = tags["addr:street"];
+  if (hn && street) return `${hn} ${street}`;
+  if (street) return street;
+  // Synthesize from use
+  const use = tags.shop || tags.amenity || tags.tourism || tags.office;
+  if (use) {
+    const pretty = use.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
+    return pretty;
+  }
+  return null;
+}
+
 function normalize(elements: OverpassElement[]): BuildingFeature[] {
   const seen = new Set<string>();
   const out: BuildingFeature[] = [];
   for (const el of elements) {
     const tags = el.tags ?? {};
-    const name = tags.name;
+    const name = deriveName(tags);
     if (!name) continue;
     const lat = el.lat ?? el.center?.lat;
     const lng = el.lon ?? el.center?.lon;
@@ -226,9 +248,10 @@ function normalize(elements: OverpassElement[]): BuildingFeature[] {
       levels,
     });
   }
-  // Prefer taller / more notable buildings first
+  // Prefer taller / more notable buildings first, but keep up to 1200 so
+  // smaller landmarks remain pickable via tap-to-label.
   out.sort((a, b) => (b.heightMeters ?? 0) - (a.heightMeters ?? 0));
-  return out.slice(0, 400);
+  return out.slice(0, 1200);
 }
 
 /** Legacy alias kept so other call sites keep compiling. */
