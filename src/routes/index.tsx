@@ -102,10 +102,18 @@ function SkylineARPage() {
   useEffect(() => {
     if (demoMode || calibratedThisSession) return;
     if (orientation.heading == null) return;
-    // Only auto-open if user has never calibrated before
     const hasPrior = typeof window !== "undefined" && window.localStorage.getItem("skyline.compass.offset") !== null;
     if (!hasPrior) setShowCalibration(true);
   }, [orientation.heading, demoMode, calibratedThisSession]);
+
+  // After compass calibration completes, prompt for FOV calibration if missing.
+  useEffect(() => {
+    if (demoMode) return;
+    if (!calibratedThisSession) return;
+    if (showCalibration) return;
+    if (hasFovCalibration()) return;
+    setShowFovCalibration(true);
+  }, [calibratedThisSession, demoMode, showCalibration]);
 
   const handleStart = async () => {
     setStarted(true);
