@@ -12,7 +12,10 @@ import {
   type LoadStatus,
 } from "@/lib/overpass";
 import type { LatLng } from "@/lib/geo";
+import { bearingAndDistanceToLatLng, distanceMeters } from "@/lib/geo";
+import { reverseGeocode, type ReverseGeocodeResult } from "@/lib/reverseGeocode";
 import { AROverlay, pickBuildingAtBearing } from "@/components/skyline/AROverlay";
+
 import { CompassHUD } from "@/components/skyline/CompassHUD";
 import { BuildingInfoSheet } from "@/components/skyline/BuildingInfoSheet";
 import { PermissionGate } from "@/components/skyline/PermissionGate";
