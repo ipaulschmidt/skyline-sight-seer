@@ -342,15 +342,28 @@ export function AROverlay({
             if (next) onSelect(next);
           };
 
+          // Edge-aware horizontal anchor:
+          //   left 30%  → grow rightward  (translateX 0)
+          //   right 30% → grow leftward   (translateX -100%)
+          //   middle    → centered        (translateX -50%)
+          const anchorTx =
+            p.xPct < 30 ? "0%" : p.xPct > 70 ? "-100%" : "-50%";
+
           return (
             <div
               key={p.b.id}
-              className={`absolute flex flex-col items-center ${zClass}`}
+              className={`absolute flex flex-col ${
+                p.xPct < 30
+                  ? "items-start"
+                  : p.xPct > 70
+                    ? "items-end"
+                    : "items-center"
+              } ${zClass}`}
               style={{
                 left: `${p.xPct}%`,
                 top: `${p.yPct}%`,
-                transform: `translate(-50%, calc(-50% + ${peekOffset}px)) scale(${p.scale})`,
-                transformOrigin: "center",
+                transform: `translate(${anchorTx}, calc(-50% + ${peekOffset}px))`,
+                maxWidth: "70vw",
               }}
             >
               <button
@@ -359,29 +372,33 @@ export function AROverlay({
                   e.stopPropagation();
                   onSelect(p.b);
                 }}
-                className={`pointer-events-auto hud-pill rounded-full transition-all ${voteClass} ${dimWhenOverlapped} ${
+                className={`pointer-events-auto hud-pill rounded-full transition-all overflow-hidden ${voteClass} ${dimWhenOverlapped} ${
                   selected
-                    ? "px-3 py-1.5 ring-2 ring-[var(--hud-accent)] shadow-[0_0_20px_rgba(0,191,255,0.5)] bg-black/80"
-                    : "px-2.5 py-1"
+                    ? "ring-2 ring-[var(--hud-accent)] shadow-[0_0_20px_rgba(0,191,255,0.5)] bg-black/80"
+                    : ""
                 }`}
+                style={{
+                  maxWidth: "160px",
+                  padding: "6px 10px",
+                }}
               >
-                <div className="flex items-center gap-1.5">
+                <div className="flex items-center gap-1.5 overflow-hidden">
                   <div
-                    className={`font-display font-semibold leading-tight whitespace-nowrap ${
-                      selected
-                        ? "text-[13px] text-[var(--hud-accent)]"
-                        : "text-[11px] text-white"
+                    className={`font-display font-semibold leading-tight overflow-hidden text-ellipsis whitespace-nowrap ${
+                      selected ? "text-[var(--hud-accent)]" : "text-white"
                     }`}
+                    style={{ fontSize: "13px", maxWidth: "140px" }}
                   >
                     {p.b.name}
                   </div>
-                  {vote === "up" && <ThumbsUp className="h-3 w-3 text-emerald-400" />}
-                  {vote === "down" && <ThumbsDown className="h-3 w-3 text-red-400" />}
+                  {vote === "up" && <ThumbsUp className="h-3 w-3 shrink-0 text-emerald-400" />}
+                  {vote === "down" && <ThumbsDown className="h-3 w-3 shrink-0 text-red-400" />}
                 </div>
                 <div
-                  className={`font-mono-hud whitespace-nowrap ${
-                    selected ? "text-[11px] text-white/85 mt-0.5" : "text-[9px] text-white/60"
+                  className={`font-mono-hud whitespace-nowrap overflow-hidden text-ellipsis ${
+                    selected ? "text-white/85 mt-0.5" : "text-white/60"
                   }`}
+                  style={{ fontSize: "11px" }}
                 >
                   {heightLabel} · {distLabel}
                 </div>
@@ -405,6 +422,7 @@ export function AROverlay({
               )}
             </div>
           );
+
         });
       })()}
     </div>
