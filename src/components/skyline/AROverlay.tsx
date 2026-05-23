@@ -1,7 +1,11 @@
 import { useMemo, useRef } from "react";
 import { angularDelta, bearingDeg, distanceMeters, type LatLng } from "@/lib/geo";
 import type { BuildingFeature } from "@/lib/overpass";
-import { getAllFeedback } from "@/lib/feedback";
+import {
+  getAllFeedback,
+  scoreMultiplierFor,
+  correctionBoostFor,
+} from "@/lib/feedback";
 import { loadFovDegrees } from "./FOVCalibration";
 import { ThumbsUp, ThumbsDown } from "lucide-react";
 
@@ -58,7 +62,8 @@ export function AROverlay({
   const lastInputsKeyRef = useRef<string>("");
   const previousResultRef = useRef<Projected[]>([]);
 
-  const inputsKey = `${user.lat.toFixed(5)}|${user.lng.toFixed(5)}|${buildings.length}|${effectiveFov.toFixed(2)}|${viewerHeightMeters.toFixed(1)}|${minHeightMeters}|${maxMarkers}`;
+  const feedbackKey = useMemo(() => Object.keys(feedback).length + ":" + selectedId, [feedback, selectedId]);
+  const inputsKey = `${user.lat.toFixed(5)}|${user.lng.toFixed(5)}|${buildings.length}|${effectiveFov.toFixed(2)}|${viewerHeightMeters.toFixed(1)}|${minHeightMeters}|${maxMarkers}|${feedbackKey}`;
 
   const projected = useMemo<Projected[]>(() => {
     if (
@@ -134,8 +139,12 @@ export function AROverlay({
       let yPct = 50 - ((elevationDeg - tiltDeg) / halfV) * 50;
       yPct = Math.max(5, Math.min(85, yPct));
       const scale = Math.max(0.7, Math.min(1.1, 1.15 - p.distance / 6000));
-      const score =
+      const baseScore =
         p.h / Math.sqrt(Math.max(p.distance, 1)) + (50 / Math.max(p.distance, 50)) * 1000;
+      const score =
+        baseScore *
+        scoreMultiplierFor(p.b.id, user, feedback) *
+        correctionBoostFor(p.b.id, user, feedback);
       return {
         b: p.b,
         delta: p.delta,

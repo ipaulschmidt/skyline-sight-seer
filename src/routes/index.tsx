@@ -475,7 +475,12 @@ function SkylineARPage() {
         />
       )}
 
-      <BuildingInfoSheet building={selected} onClose={() => setSelected(null)} />
+      <BuildingInfoSheet
+        building={selected}
+        onClose={() => setSelected(null)}
+        userLocation={userPos}
+        allBuildings={buildings}
+      />
     </main>
   );
 }
