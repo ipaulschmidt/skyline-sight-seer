@@ -71,9 +71,10 @@ function SkylineARPage() {
   // Apply calibration offset (skip in demo mode — slider is the source of truth).
   const heading = demoMode ? rawHeading : applyCompassOffset(rawHeading, compassOffset);
 
-  // Load saved offset + floor on mount
+  // Load saved offset + floor + FOV on mount
   useEffect(() => {
     setCompassOffset(loadCompassOffset());
+    setFovDeg(loadFovDegrees());
     if (typeof window !== "undefined") {
       const saved = window.localStorage.getItem(FLOOR_STORAGE_KEY);
       if (saved != null) {
