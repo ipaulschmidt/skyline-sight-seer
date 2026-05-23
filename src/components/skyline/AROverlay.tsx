@@ -92,6 +92,7 @@ export function AROverlay({
     const pre: Pre[] = [];
     const heightRelief = Math.min(1, eye / 60);
     for (const b of buildings) {
+      if (b.unnamed) continue; // tap-only targets, not auto-labelled
       const h = b.heightMeters ?? (b.levels ? b.levels * 3.2 : 0);
       const dist = distanceMeters(user, { lat: b.lat, lng: b.lng });
       if (dist < 30 || dist > maxDist) continue;
