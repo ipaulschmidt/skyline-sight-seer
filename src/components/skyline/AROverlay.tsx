@@ -138,8 +138,12 @@ export function AROverlay({
       let yPct = 50 - ((elevationDeg - tiltDeg) / halfV) * 50;
       yPct = Math.max(5, Math.min(85, yPct));
       const scale = Math.max(0.7, Math.min(1.1, 1.15 - p.distance / 6000));
-      const score =
+      const baseScore =
         p.h / Math.sqrt(Math.max(p.distance, 1)) + (50 / Math.max(p.distance, 50)) * 1000;
+      const score =
+        baseScore *
+        scoreMultiplierFor(p.b.id, user, feedback) *
+        correctionBoostFor(p.b.id, user, feedback);
       return {
         b: p.b,
         delta: p.delta,
