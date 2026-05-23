@@ -260,8 +260,7 @@ function normalize(elements: OverpassElement[]): BuildingFeature[] {
   const out: BuildingFeature[] = [];
   for (const el of elements) {
     const tags = el.tags ?? {};
-    const name = deriveName(tags);
-    if (!name) continue;
+    const named = deriveName(tags);
     const lat = el.lat ?? el.center?.lat;
     const lng = el.lon ?? el.center?.lon;
     if (lat == null || lng == null) continue;
@@ -269,6 +268,22 @@ function normalize(elements: OverpassElement[]): BuildingFeature[] {
     const levels = tags["building:levels"]
       ? parseInt(tags["building:levels"], 10)
       : undefined;
+
+    // Allow unnamed buildings through if they're substantial — gives us
+    // tap targets for towers OSM hasn't labeled yet.
+    let name = named;
+    let unnamed = false;
+    if (!name) {
+      const tall =
+        (heightMeters != null && heightMeters >= 25) ||
+        (levels != null && levels >= 8);
+      if (!tall) continue;
+      const kind = tags.building && tags.building !== "yes" ? tags.building : "Building";
+      const pretty = kind.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
+      name = levels ? `${pretty} · ${levels} fl` : `${pretty}`;
+      unnamed = true;
+    }
+
     const key = name + "|" + lat.toFixed(4) + "|" + lng.toFixed(4);
     if (seen.has(key)) continue;
     seen.add(key);
@@ -288,6 +303,7 @@ function normalize(elements: OverpassElement[]): BuildingFeature[] {
       heightMeters: heightMeters ?? (levels ? levels * 3.2 : undefined),
       levels,
       osmTags: Object.keys(osmTags).length ? osmTags : undefined,
+      unnamed: unnamed || undefined,
     });
   }
   // Prefer taller / more notable buildings first, but keep up to 1200 so
