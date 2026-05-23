@@ -181,15 +181,22 @@ function SkylineARPage() {
           onTapBearing={
             tapMode
               ? (offset) => {
+                  // Wider base tolerance — 8° at 1x, scaled with zoom.
+                  const tol = Math.max(3, (60 / zoom) * 0.13);
                   const hit = pickBuildingAtBearing(
                     userPos,
                     heading,
                     offset,
                     buildings,
-                    Math.max(2, (60 / zoom) * 0.08),
+                    tol,
                   );
-                  if (hit) setSelected(hit);
-                  setTapMode(false);
+                  if (hit) {
+                    setSelected(hit);
+                    setTapMiss(null);
+                    // Keep tapMode on so the user can re-pick if wrong.
+                  } else {
+                    setTapMiss(Date.now());
+                  }
                 }
               : undefined
           }
