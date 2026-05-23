@@ -24,7 +24,6 @@ import {
 } from "@/components/skyline/CompassCalibration";
 import {
   FOVCalibration,
-  hasFovCalibration,
   loadFovDegrees,
 } from "@/components/skyline/FOVCalibration";
 import { Loader2, Smartphone, RotateCw, Download, MapPin, CheckCircle2, RefreshCw, ZoomIn, ZoomOut, Crosshair, Compass, Building2, LocateFixed, Scan } from "lucide-react";
@@ -100,23 +99,10 @@ function SkylineARPage() {
     return EYE_OFFSET_M;
   }, [floor]);
 
-  // First-time calibration: when heading first becomes available on mobile and
-  // we have no prior calibration this session, prompt the user.
-  useEffect(() => {
-    if (demoMode || calibratedThisSession) return;
-    if (orientation.heading == null) return;
-    const hasPrior = typeof window !== "undefined" && window.localStorage.getItem("skyline.compass.offset") !== null;
-    if (!hasPrior) setShowCalibration(true);
-  }, [orientation.heading, demoMode, calibratedThisSession]);
+  // Calibration is now opt-in: tap the compass / FOV buttons in the HUD when
+  // labels look off. No upfront modal — modern device compasses are usually
+  // close enough to start using the app immediately.
 
-  // After compass calibration completes, prompt for FOV calibration if missing.
-  useEffect(() => {
-    if (demoMode) return;
-    if (!calibratedThisSession) return;
-    if (showCalibration) return;
-    if (hasFovCalibration()) return;
-    setShowFovCalibration(true);
-  }, [calibratedThisSession, demoMode, showCalibration]);
 
   const handleStart = async () => {
     setStarted(true);
@@ -165,7 +151,7 @@ function SkylineARPage() {
     );
   }
 
-  const gpsStuck = !demoMode && (geo.timedOut || (geo.error && !geo.position));
+  const gpsStuck = !demoMode && !!geo.error && !geo.position;
 
   return (
     <main className="fixed inset-0 overflow-hidden bg-black text-white">
@@ -207,16 +193,13 @@ function SkylineARPage() {
         />
       )}
 
-      {/* GPS stuck → offer escape hatches */}
-      {gpsStuck && !camError && (
+      {/* Real GPS error (permission denied / unsupported) — soft timeouts no longer surface here */}
+      {!demoMode && geo.error && !geo.position && !camError && (
         <ErrorBanner
-          title={geo.timedOut ? "GPS is taking too long" : "Location unavailable"}
-          msg={
-            geo.error ??
-            "Some browsers (Safari in private mode, iframes, desktop) block geolocation. You can pick a city to explore instead."
-          }
-          action={() => setShowCityPicker(true)}
-          actionLabel="Pick a city"
+          title="Location unavailable"
+          msg={geo.error}
+          action={() => geo.refresh()}
+          actionLabel="Try again"
         />
       )}
 
