@@ -15,6 +15,8 @@ interface Props {
   onTapBearing?: (bearingOffsetDeg: number) => void;
   minHeightMeters?: number;
   maxMarkers?: number;
+  /** Viewer eye height above local ground in meters (floor height etc). */
+  viewerHeightMeters?: number;
 }
 
 interface Projected {
@@ -37,12 +39,14 @@ export function AROverlay({
   onTapBearing,
   minHeightMeters = 40,
   maxMarkers = 14,
+  viewerHeightMeters = 1.6,
 }: Props) {
   const feedback = useMemo(() => getAllFeedback(), [selectedId]);
 
   const projected = useMemo<Projected[]>(() => {
     const half = fovDeg / 2;
     const zoomFactor = fovDeg / 60; // 1 at normal, ~0.33 at strong zoom
+    const eye = Math.max(0, viewerHeightMeters); // m above ground
 
     // Tighter distance cap. Zoom extends reach (telephoto sees farther).
     // 2km baseline, up to ~4km at 3x zoom.
@@ -54,40 +58,48 @@ export function AROverlay({
       delta: number;
       distance: number;
       h: number;
-      /** angular elevation of the rooftop = atan(h/dist), in radians */
+      /** angular elevation of rooftop relative to viewer's eye (radians). */
       angTop: number;
     }
     const pre: Pre[] = [];
+    // When viewer is high up, we can see much shorter buildings clearly.
+    // Drop the minimum-height requirement as we climb.
+    const heightRelief = Math.min(1, eye / 60); // 0 at ground, 1 at ~60m+
     for (const b of buildings) {
       const h = b.heightMeters ?? (b.levels ? b.levels * 3.2 : 0);
       const dist = distanceMeters(user, { lat: b.lat, lng: b.lng });
       if (dist < 30 || dist > maxDist) continue;
 
-      const requiredHeight = Math.max(
+      const baseReq = Math.max(
         minHeightMeters * Math.max(0.5, zoomFactor),
         (25 + (dist / 1000) * 25) * Math.max(0.5, zoomFactor),
       );
+      const requiredHeight = baseReq * (1 - 0.7 * heightRelief);
       if (h < requiredHeight) continue;
 
       const brng = bearingDeg(user, { lat: b.lat, lng: b.lng });
       const delta = angularDelta(heading, brng);
       if (Math.abs(delta) > half) continue;
 
-      pre.push({ b, delta, distance: dist, h, angTop: Math.atan2(h, dist) });
+      // Rooftop angle relative to eye — negative if viewer is above rooftop.
+      const angTop = Math.atan2(h - eye, dist);
+      pre.push({ b, delta, distance: dist, h, angTop });
     }
 
     // Occlusion pass: a building is hidden if a CLOSER building in roughly the
-    // same direction has a taller apparent height (rooftop angular elevation).
-    // Bearing window scales with FOV — tight angular cone in front of viewer.
+    // same direction has a taller apparent rooftop angle (from viewer's eye).
+    // If viewer is above the closer building's roof, its angTop is negative and
+    // it can no longer block anything taller behind it.
     const occWindow = Math.max(1.2, 2.5 * zoomFactor); // degrees
     const byDist = [...pre].sort((a, b) => a.distance - b.distance);
     const visible: Pre[] = [];
     for (const p of byDist) {
       const blocked = visible.some(
         (n) =>
-          n.distance < p.distance - 20 && // must be meaningfully closer
+          n.distance < p.distance - 20 &&
           Math.abs(n.delta - p.delta) < occWindow &&
-          n.angTop >= p.angTop * 0.95, // near building's top covers far building
+          n.angTop > 0 && // can't block if its roof is below the eye
+          n.angTop >= p.angTop * 0.95,
       );
       if (!blocked) visible.push(p);
     }
@@ -117,7 +129,7 @@ export function AROverlay({
     return kept
       .map((k) => ({ ...k, lane: lanes.get(k.b.id) ?? 0 }))
       .sort((a, b) => b.distance - a.distance);
-  }, [user, heading, buildings, fovDeg, minHeightMeters, maxMarkers]);
+  }, [user, heading, buildings, fovDeg, minHeightMeters, maxMarkers, viewerHeightMeters]);
 
   const handleTap = (e: React.MouseEvent<HTMLDivElement>) => {
     if (!onTapBearing) return;
@@ -229,10 +241,11 @@ export function pickBuildingAtBearing(
   bearingOffsetDeg: number,
   buildings: BuildingFeature[],
   toleranceDeg = 5,
+  viewerHeightMeters = 1.6,
 ): BuildingFeature | null {
   const targetBearing = (heading + bearingOffsetDeg + 360) % 360;
+  const eye = Math.max(0, viewerHeightMeters);
 
-  // Gather all in-cone candidates with apparent height.
   interface Cand {
     b: BuildingFeature;
     delta: number;
@@ -249,7 +262,7 @@ export function pickBuildingAtBearing(
       const delta = Math.abs(angularDelta(targetBearing, brng));
       if (delta > tol) continue;
       const h = b.heightMeters ?? (b.levels ? b.levels * 3.2 : 10);
-      out.push({ b, delta, dist, h, angTop: Math.atan2(h, dist) });
+      out.push({ b, delta, dist, h, angTop: Math.atan2(h - eye, dist) });
     }
     return out;
   };
@@ -260,7 +273,10 @@ export function pickBuildingAtBearing(
     const byDist = [...cands].sort((a, b) => a.dist - b.dist);
     for (const c of byDist) {
       const blocked = byDist.some(
-        (n) => n.dist < c.dist - 20 && n.angTop >= c.angTop * 0.95,
+        (n) =>
+          n.dist < c.dist - 20 &&
+          n.angTop > 0 &&
+          n.angTop >= c.angTop * 0.95,
       );
       if (!blocked) return c.b;
     }

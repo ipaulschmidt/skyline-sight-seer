@@ -22,7 +22,11 @@ import {
   saveCompassOffset,
   applyCompassOffset,
 } from "@/components/skyline/CompassCalibration";
-import { Loader2, Smartphone, RotateCw, Download, MapPin, CheckCircle2, RefreshCw, ZoomIn, ZoomOut, Crosshair, Compass } from "lucide-react";
+import { Loader2, Smartphone, RotateCw, Download, MapPin, CheckCircle2, RefreshCw, ZoomIn, ZoomOut, Crosshair, Compass, Building2 } from "lucide-react";
+
+const FLOOR_HEIGHT_M = 3.5;
+const EYE_OFFSET_M = 1.6;
+const FLOOR_STORAGE_KEY = "skyline.viewer.floor";
 
 export const Route = createFileRoute("/")({
   component: SkylineARPage,
@@ -46,6 +50,8 @@ function SkylineARPage() {
   const [compassOffset, setCompassOffset] = useState(0);
   const [showCalibration, setShowCalibration] = useState(false);
   const [calibratedThisSession, setCalibratedThisSession] = useState(false);
+  const [floor, setFloor] = useState<number>(0); // 0 = ground; user-set override
+  const [showFloorPicker, setShowFloorPicker] = useState(false);
 
   const mobile = useMemo(isMobile, []);
 
@@ -58,10 +64,33 @@ function SkylineARPage() {
   // Apply calibration offset (skip in demo mode — slider is the source of truth).
   const heading = demoMode ? rawHeading : applyCompassOffset(rawHeading, compassOffset);
 
-  // Load saved offset on mount
+  // Load saved offset + floor on mount
   useEffect(() => {
     setCompassOffset(loadCompassOffset());
+    if (typeof window !== "undefined") {
+      const saved = window.localStorage.getItem(FLOOR_STORAGE_KEY);
+      if (saved != null) {
+        const n = parseInt(saved, 10);
+        if (Number.isFinite(n)) setFloor(n);
+      }
+    }
   }, []);
+
+  // Persist floor changes
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      window.localStorage.setItem(FLOOR_STORAGE_KEY, String(floor));
+    }
+  }, [floor]);
+
+  // Viewer eye height above local ground in meters.
+  // Manual floor wins; otherwise fall back to GPS altitude only when it looks
+  // reasonable (accuracy < 30m). GPS altitude is unreliable indoors and on
+  // high floors, so we only use it as a hint.
+  const viewerHeightMeters = useMemo(() => {
+    if (floor > 0) return floor * FLOOR_HEIGHT_M + EYE_OFFSET_M;
+    return EYE_OFFSET_M;
+  }, [floor]);
 
   // First-time calibration: when heading first becomes available on mobile and
   // we have no prior calibration this session, prompt the user.
@@ -202,12 +231,12 @@ function SkylineARPage() {
           heading={heading}
           buildings={buildings}
           fovDeg={60 / zoom}
+          viewerHeightMeters={viewerHeightMeters}
           selectedId={selected?.id ?? null}
           onSelect={(b) => setSelected(b)}
           onTapBearing={
             tapMode
               ? (offset) => {
-                  // Wider base tolerance — 8° at 1x, scaled with zoom.
                   const tol = Math.max(3, (60 / zoom) * 0.13);
                   const hit = pickBuildingAtBearing(
                     userPos,
@@ -215,11 +244,11 @@ function SkylineARPage() {
                     offset,
                     buildings,
                     tol,
+                    viewerHeightMeters,
                   );
                   if (hit) {
                     setSelected(hit);
                     setTapMiss(null);
-                    // Keep tapMode on so the user can re-pick if wrong.
                   } else {
                     setTapMiss(Date.now());
                   }
@@ -273,7 +302,28 @@ function SkylineARPage() {
               <Compass className="h-4 w-4" />
             </button>
           )}
+          <button
+            onClick={() => setShowFloorPicker(true)}
+            className={`hud-pill flex h-10 w-10 flex-col items-center justify-center rounded-full ${
+              floor > 0 ? "text-[var(--hud-accent)]" : ""
+            }`}
+            aria-label="Set your floor"
+            title={floor > 0 ? `Floor ${floor} (~${Math.round(floor * FLOOR_HEIGHT_M)}m up)` : "Ground floor"}
+          >
+            <Building2 className="h-4 w-4" />
+            <span className="font-mono-hud text-[8px] leading-none mt-0.5">
+              {floor > 0 ? `F${floor}` : "G"}
+            </span>
+          </button>
         </div>
+      )}
+
+      {showFloorPicker && (
+        <FloorPicker
+          floor={floor}
+          onChange={setFloor}
+          onClose={() => setShowFloorPicker(false)}
+        />
       )}
 
       {tapMode && (
@@ -530,6 +580,68 @@ function CenterMsg({
     </div>
   );
 }
+
+function FloorPicker({
+  floor,
+  onChange,
+  onClose,
+}: {
+  floor: number;
+  onChange: (n: number) => void;
+  onClose: () => void;
+}) {
+  const presets = [0, 5, 10, 20, 30, 50, 80];
+  return (
+    <div className="absolute inset-0 z-30 flex items-center justify-center bg-black/70 backdrop-blur-md">
+      <div className="hud-pill w-[min(420px,92vw)] rounded-3xl p-6">
+        <div className="mb-1 font-display text-xl font-semibold text-white">Your floor</div>
+        <div className="mb-4 font-mono-hud text-[10px] uppercase text-white/60">
+          Helps labels match what you actually see over nearby rooftops
+        </div>
+        <div className="mb-4 flex items-baseline justify-between">
+          <div>
+            <div className="font-display text-3xl font-semibold text-[var(--hud-accent)]">
+              {floor === 0 ? "Ground" : `Floor ${floor}`}
+            </div>
+            <div className="font-mono-hud text-[10px] text-white/60">
+              ~{Math.round(floor * FLOOR_HEIGHT_M + EYE_OFFSET_M)}m above street
+            </div>
+          </div>
+        </div>
+        <input
+          type="range"
+          min={0}
+          max={120}
+          value={floor}
+          onChange={(e) => onChange(parseInt(e.target.value))}
+          className="w-full accent-[var(--hud-accent)]"
+        />
+        <div className="mt-3 flex flex-wrap gap-1.5">
+          {presets.map((f) => (
+            <button
+              key={f}
+              onClick={() => onChange(f)}
+              className={`rounded-full px-3 py-1 font-mono-hud text-[10px] uppercase transition ${
+                floor === f
+                  ? "bg-[var(--hud-accent)] text-[#001218]"
+                  : "bg-white/10 text-white/80 hover:bg-white/20"
+              }`}
+            >
+              {f === 0 ? "Ground" : `F${f}`}
+            </button>
+          ))}
+        </div>
+        <button
+          onClick={onClose}
+          className="mt-5 w-full rounded-full bg-white/10 px-4 py-2 font-mono-hud text-[10px] uppercase text-white/70"
+        >
+          Done
+        </button>
+      </div>
+    </div>
+  );
+}
+
 
 function BackgroundGlow() {
   return (
