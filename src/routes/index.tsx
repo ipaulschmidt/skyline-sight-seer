@@ -52,7 +52,7 @@ function SkylineARPage() {
   const [selected, setSelected] = useState<BuildingFeature | null>(null);
   const [showCityPicker, setShowCityPicker] = useState(false);
   const [zoom, setZoom] = useState(1); // 1x .. 3x; narrows FOV and scales video
-  const [tapMode, setTapMode] = useState(false);
+  const [tapHintDismissed, setTapHintDismissed] = useState(false);
   const [tapMiss, setTapMiss] = useState<number | null>(null); // timestamp of last miss
   const [locationResult, setLocationResult] = useState<
     (ReverseGeocodeResult & { distanceMeters: number; bearingDeg: number }) | null
