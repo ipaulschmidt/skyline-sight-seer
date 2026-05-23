@@ -88,12 +88,43 @@ export function BuildingInfoSheet({ building, onClose }: Props) {
           )}
         </div>
 
+        {/* Accuracy feedback */}
+        <div className="mt-6 flex items-center justify-between gap-3 rounded-2xl border border-white/10 bg-white/5 p-3">
+          <div className="font-mono-hud text-[10px] uppercase text-white/60">
+            Is this label correct?
+          </div>
+          <div className="flex gap-2">
+            <button
+              onClick={() => castVote("up")}
+              className={`flex items-center gap-1.5 rounded-full px-3 py-1.5 font-mono-hud text-[10px] uppercase transition ${
+                vote === "up"
+                  ? "bg-emerald-400/20 text-emerald-300 ring-1 ring-emerald-400/50"
+                  : "bg-white/5 text-white/70 hover:bg-white/10"
+              }`}
+              aria-pressed={vote === "up"}
+            >
+              <ThumbsUp className="h-3.5 w-3.5" /> Accurate
+            </button>
+            <button
+              onClick={() => castVote("down")}
+              className={`flex items-center gap-1.5 rounded-full px-3 py-1.5 font-mono-hud text-[10px] uppercase transition ${
+                vote === "down"
+                  ? "bg-red-400/20 text-red-300 ring-1 ring-red-400/50"
+                  : "bg-white/5 text-white/70 hover:bg-white/10"
+              }`}
+              aria-pressed={vote === "down"}
+            >
+              <ThumbsDown className="h-3.5 w-3.5" /> Wrong
+            </button>
+          </div>
+        </div>
+
         {summary?.url && (
           <a
             href={summary.url}
             target="_blank"
             rel="noopener noreferrer"
-            className="mt-6 inline-flex items-center gap-2 rounded-full border border-[var(--hud-accent)]/40 bg-[var(--hud-accent)]/10 px-4 py-2 font-mono-hud text-xs uppercase text-[var(--hud-accent)] transition hover:bg-[var(--hud-accent)]/20"
+            className="mt-4 inline-flex items-center gap-2 rounded-full border border-[var(--hud-accent)]/40 bg-[var(--hud-accent)]/10 px-4 py-2 font-mono-hud text-xs uppercase text-[var(--hud-accent)] transition hover:bg-[var(--hud-accent)]/20"
           >
             Read more on Wikipedia <ExternalLink className="h-3 w-3" />
           </a>
