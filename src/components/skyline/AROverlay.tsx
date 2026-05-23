@@ -196,10 +196,25 @@ export function AROverlay({
     viewerHeightMeters,
   ]);
 
+  // Tap pulses — ephemeral visual feedback at the tap point for every
+  // wrapper tap (i.e. taps that didn't hit a label button).
+  const [pulses, setPulses] = useState<{ id: number; x: number; y: number }[]>([]);
+  const pulseIdRef = useRef(0);
+
   const handleTap = (e: React.MouseEvent<HTMLDivElement>) => {
-    if (!onTapBearing) return;
     const rect = e.currentTarget.getBoundingClientRect();
     const xPct = ((e.clientX - rect.left) / rect.width) * 100;
+    const yPx = e.clientY - rect.top;
+    const xPx = e.clientX - rect.left;
+
+    // Always show the pulse so the user knows the tap registered.
+    const id = ++pulseIdRef.current;
+    setPulses((prev) => [...prev, { id, x: xPx, y: yPx }]);
+    window.setTimeout(() => {
+      setPulses((prev) => prev.filter((p) => p.id !== id));
+    }, 650);
+
+    if (!onTapBearing) return;
     const half = effectiveFov / 2;
     const offset = ((xPct - 50) / 50) * half;
     onTapBearing(offset);
@@ -213,6 +228,20 @@ export function AROverlay({
     >
       <div className="pointer-events-none absolute left-0 right-0 top-1/2 h-px bg-white/10" />
 
+      {/* Tap-pulse feedback */}
+      {pulses.map((p) => (
+        <div
+          key={p.id}
+          className="pointer-events-none absolute z-40"
+          style={{ left: p.x, top: p.y }}
+        >
+          <div
+            className="tap-pulse h-12 w-12 rounded-full border-2 border-[var(--hud-accent)]"
+            style={{ boxShadow: "0 0 24px rgba(0,191,255,0.6)" }}
+          />
+        </div>
+      ))}
+
       {onTapBearing && (
         <div className="pointer-events-none absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 opacity-40">
           <div className="h-8 w-8 rounded-full border border-[var(--hud-accent)]" />
@@ -220,6 +249,7 @@ export function AROverlay({
           <div className="absolute left-1/2 top-1/2 h-px w-3 -translate-x-1/2 -translate-y-1/2 bg-[var(--hud-accent)]" />
         </div>
       )}
+
 
       {(() => {
         // Build clusters: any labels whose screen position is close enough
