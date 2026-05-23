@@ -194,16 +194,13 @@ function SkylineARPage() {
         />
       )}
 
-      {/* GPS stuck → offer escape hatches */}
-      {gpsStuck && !camError && (
+      {/* Real GPS error (permission denied / unsupported) — soft timeouts no longer surface here */}
+      {!demoMode && geo.error && !geo.position && !camError && (
         <ErrorBanner
-          title={geo.timedOut ? "GPS is taking too long" : "Location unavailable"}
-          msg={
-            geo.error ??
-            "Some browsers (Safari in private mode, iframes, desktop) block geolocation. You can pick a city to explore instead."
-          }
-          action={() => setShowCityPicker(true)}
-          actionLabel="Pick a city"
+          title="Location unavailable"
+          msg={geo.error}
+          action={() => geo.refresh()}
+          actionLabel="Try again"
         />
       )}
 
