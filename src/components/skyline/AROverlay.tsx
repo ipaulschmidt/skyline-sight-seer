@@ -62,7 +62,8 @@ export function AROverlay({
   const lastInputsKeyRef = useRef<string>("");
   const previousResultRef = useRef<Projected[]>([]);
 
-  const inputsKey = `${user.lat.toFixed(5)}|${user.lng.toFixed(5)}|${buildings.length}|${effectiveFov.toFixed(2)}|${viewerHeightMeters.toFixed(1)}|${minHeightMeters}|${maxMarkers}`;
+  const feedbackKey = useMemo(() => Object.keys(feedback).length + ":" + selectedId, [feedback, selectedId]);
+  const inputsKey = `${user.lat.toFixed(5)}|${user.lng.toFixed(5)}|${buildings.length}|${effectiveFov.toFixed(2)}|${viewerHeightMeters.toFixed(1)}|${minHeightMeters}|${maxMarkers}|${feedbackKey}`;
 
   const projected = useMemo<Projected[]>(() => {
     if (
