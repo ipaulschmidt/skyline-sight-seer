@@ -29,7 +29,7 @@ import {
   FOVCalibration,
   loadFovDegrees,
 } from "@/components/skyline/FOVCalibration";
-import { Loader2, Smartphone, RotateCw, Download, MapPin, CheckCircle2, RefreshCw, ZoomIn, ZoomOut, Crosshair, Compass, Building2, LocateFixed, Scan } from "lucide-react";
+import { Loader2, Smartphone, RotateCw, Download, MapPin, CheckCircle2, RefreshCw, ZoomIn, ZoomOut, Compass, Building2, LocateFixed, Scan } from "lucide-react";
 
 const FLOOR_HEIGHT_M = 3.5;
 const EYE_OFFSET_M = 1.6;
@@ -52,7 +52,7 @@ function SkylineARPage() {
   const [selected, setSelected] = useState<BuildingFeature | null>(null);
   const [showCityPicker, setShowCityPicker] = useState(false);
   const [zoom, setZoom] = useState(1); // 1x .. 3x; narrows FOV and scales video
-  const [tapMode, setTapMode] = useState(false);
+  const [tapHintDismissed, setTapHintDismissed] = useState(false);
   const [tapMiss, setTapMiss] = useState<number | null>(null); // timestamp of last miss
   const [locationResult, setLocationResult] = useState<
     (ReverseGeocodeResult & { distanceMeters: number; bearingDeg: number }) | null
@@ -243,47 +243,43 @@ function SkylineARPage() {
           onSelect={(b) => setSelected(b)}
           maxMarkers={Math.round(14 * zoom)}
           minHeightMeters={Math.max(18, Math.round(40 / zoom))}
-          onTapBearing={
-            tapMode
-              ? (offset) => {
-                  const tol = Math.max(3, (fovDeg / zoom) * 0.13);
-                  const hit = pickBuildingAtBearing(
-                    userPos,
-                    heading,
-                    offset,
-                    buildings,
-                    tol,
-                    viewerHeightMeters,
-                  );
-                  if (hit) {
-                    setSelected(hit);
-                    setTapMiss(null);
-                    return;
-                  }
-                  // No labeled building hit — fire the lightweight
-                  // identify-by-location flow. The pulse animation already
-                  // fired inside the overlay, so the user sees feedback.
-                  setTapMiss(null);
-                  const targetBearing = (heading + offset + 360) % 360;
-                  const estDistance = 500; // rough lookup point
-                  const target = bearingAndDistanceToLatLng(
-                    userPos.lat,
-                    userPos.lng,
-                    targetBearing,
-                    estDistance,
-                  );
-                  void reverseGeocode(target.lat, target.lng).then((r) => {
-                    const d = distanceMeters(userPos, { lat: r.lat, lng: r.lng });
-                    setSelected(null);
-                    setLocationResult({
-                      ...r,
-                      distanceMeters: d,
-                      bearingDeg: targetBearing,
-                    });
-                  });
-                }
-              : undefined
-          }
+          onTapBearing={(offset) => {
+            const tol = Math.max(3, (fovDeg / zoom) * 0.13);
+            const hit = pickBuildingAtBearing(
+              userPos,
+              heading,
+              offset,
+              buildings,
+              tol,
+              viewerHeightMeters,
+            );
+            if (hit) {
+              setSelected(hit);
+              setTapMiss(null);
+              return;
+            }
+            // No labeled building hit — fire the lightweight
+            // identify-by-location flow. The pulse animation already
+            // fired inside the overlay, so the user sees feedback.
+            setTapMiss(null);
+            const targetBearing = (heading + offset + 360) % 360;
+            const estDistance = 500;
+            const target = bearingAndDistanceToLatLng(
+              userPos.lat,
+              userPos.lng,
+              targetBearing,
+              estDistance,
+            );
+            void reverseGeocode(target.lat, target.lng).then((r) => {
+              const d = distanceMeters(userPos, { lat: r.lat, lng: r.lng });
+              setSelected(null);
+              setLocationResult({
+                ...r,
+                distanceMeters: d,
+                bearingDeg: targetBearing,
+              });
+            });
+          }}
 
         />
       )}
@@ -309,16 +305,6 @@ function SkylineARPage() {
             aria-label="Zoom out"
           >
             <ZoomOut className="h-4 w-4" />
-          </button>
-          <button
-            onClick={() => setTapMode((t) => !t)}
-            className={`hud-pill mt-2 flex h-10 w-10 items-center justify-center rounded-full ${
-              tapMode ? "ring-2 ring-[var(--hud-accent)] text-[var(--hud-accent)]" : ""
-            }`}
-            aria-label="Tap to label"
-            aria-pressed={tapMode}
-          >
-            <Crosshair className="h-4 w-4" />
           </button>
           {!demoMode && (
             <button
@@ -390,10 +376,13 @@ function SkylineARPage() {
         />
       )}
 
-      {tapMode && (
-        <div className="pointer-events-none absolute left-1/2 top-24 z-10 -translate-x-1/2 hud-pill rounded-full px-3 py-1.5 font-mono-hud text-[10px] uppercase text-[var(--hud-accent)]">
-          Tap the building · tap again to refine
-        </div>
+      {!tapHintDismissed && userPos && heading != null && (
+        <button
+          onClick={() => setTapHintDismissed(true)}
+          className="absolute left-1/2 top-24 z-10 -translate-x-1/2 hud-pill rounded-full px-3 py-1.5 font-mono-hud text-[10px] uppercase text-[var(--hud-accent)]"
+        >
+          Tap any building to identify · ✕
+        </button>
       )}
       {tapMiss && Date.now() - tapMiss < 2200 && (
         <div
