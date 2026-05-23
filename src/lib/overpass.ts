@@ -9,6 +9,8 @@ export interface BuildingFeature {
   levels?: number;
   /** Raw OSM tags retained for the info sheet (architect, year, address, wikidata, etc.). */
   osmTags?: Record<string, string>;
+  /** True if this building has no real name in OSM. Excluded from auto AR labels but still tappable. */
+  unnamed?: boolean;
 }
 
 /** Tags we surface in the info sheet. Anything not in this list is dropped to keep the cache small. */
