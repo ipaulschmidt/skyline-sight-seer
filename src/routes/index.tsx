@@ -43,6 +43,9 @@ function SkylineARPage() {
   const [zoom, setZoom] = useState(1); // 1x .. 3x; narrows FOV and scales video
   const [tapMode, setTapMode] = useState(false);
   const [tapMiss, setTapMiss] = useState<number | null>(null); // timestamp of last miss
+  const [compassOffset, setCompassOffset] = useState(0);
+  const [showCalibration, setShowCalibration] = useState(false);
+  const [calibratedThisSession, setCalibratedThisSession] = useState(false);
 
   const mobile = useMemo(isMobile, []);
 
@@ -51,7 +54,24 @@ function SkylineARPage() {
   const geo = useGeolocation(started && !demoMode);
 
   const userPos = demoMode ? demoCity : geo.position;
-  const heading = demoMode ? demoHeading : orientation.heading;
+  const rawHeading = demoMode ? demoHeading : orientation.heading;
+  // Apply calibration offset (skip in demo mode — slider is the source of truth).
+  const heading = demoMode ? rawHeading : applyCompassOffset(rawHeading, compassOffset);
+
+  // Load saved offset on mount
+  useEffect(() => {
+    setCompassOffset(loadCompassOffset());
+  }, []);
+
+  // First-time calibration: when heading first becomes available on mobile and
+  // we have no prior calibration this session, prompt the user.
+  useEffect(() => {
+    if (demoMode || calibratedThisSession) return;
+    if (orientation.heading == null) return;
+    // Only auto-open if user has never calibrated before
+    const hasPrior = typeof window !== "undefined" && window.localStorage.getItem("skyline.compass.offset") !== null;
+    if (!hasPrior) setShowCalibration(true);
+  }, [orientation.heading, demoMode, calibratedThisSession]);
 
   const handleStart = async () => {
     setStarted(true);
