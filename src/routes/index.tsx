@@ -1,5 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useCamera } from "@/hooks/useCamera";
 import { useDeviceOrientation } from "@/hooks/useDeviceOrientation";
 import { useGeolocation } from "@/hooks/useGeolocation";
