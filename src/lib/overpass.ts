@@ -53,7 +53,7 @@ const OVERPASS_MIRRORS = [
   "https://overpass.private.coffee/api/interpreter",
 ];
 
-const CACHE_VERSION = "v2";
+const CACHE_VERSION = "v3";
 const CACHE_TTL_MS = 1000 * 60 * 60 * 24 * 30; // 30 days
 
 function parseHeight(tag?: string): number | undefined {
