@@ -22,7 +22,11 @@ import {
   saveCompassOffset,
   applyCompassOffset,
 } from "@/components/skyline/CompassCalibration";
-import { Loader2, Smartphone, RotateCw, Download, MapPin, CheckCircle2, RefreshCw, ZoomIn, ZoomOut, Crosshair, Compass, Building2, LocateFixed } from "lucide-react";
+import {
+  FOVCalibration,
+  hasFovCalibration,
+} from "@/components/skyline/FOVCalibration";
+import { Loader2, Smartphone, RotateCw, Download, MapPin, CheckCircle2, RefreshCw, ZoomIn, ZoomOut, Crosshair, Compass, Building2, LocateFixed, Scan } from "lucide-react";
 
 const FLOOR_HEIGHT_M = 3.5;
 const EYE_OFFSET_M = 1.6;
