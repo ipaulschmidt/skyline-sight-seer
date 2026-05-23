@@ -243,7 +243,8 @@ function SkylineARPage() {
           user={userPos}
           heading={heading}
           buildings={buildings}
-          fovDeg={60 / zoom}
+          fovDeg={undefined /* AROverlay reads calibrated FOV from localStorage */}
+          tiltDeg={demoMode ? 0 : orientation.tiltDeg ?? 0}
           viewerHeightMeters={viewerHeightMeters}
           selectedId={selected?.id ?? null}
           onSelect={(b) => setSelected(b)}
