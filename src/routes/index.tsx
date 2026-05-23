@@ -251,6 +251,8 @@ function SkylineARPage() {
           viewerHeightMeters={viewerHeightMeters}
           selectedId={selected?.id ?? null}
           onSelect={(b) => setSelected(b)}
+          maxMarkers={Math.round(14 * zoom)}
+          minHeightMeters={Math.max(18, Math.round(40 / zoom))}
           onTapBearing={
             tapMode
               ? (offset) => {
