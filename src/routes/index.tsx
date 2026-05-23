@@ -376,10 +376,13 @@ function SkylineARPage() {
         />
       )}
 
-      {tapMode && (
-        <div className="pointer-events-none absolute left-1/2 top-24 z-10 -translate-x-1/2 hud-pill rounded-full px-3 py-1.5 font-mono-hud text-[10px] uppercase text-[var(--hud-accent)]">
-          Tap the building · tap again to refine
-        </div>
+      {!tapHintDismissed && userPos && heading != null && (
+        <button
+          onClick={() => setTapHintDismissed(true)}
+          className="absolute left-1/2 top-24 z-10 -translate-x-1/2 hud-pill rounded-full px-3 py-1.5 font-mono-hud text-[10px] uppercase text-[var(--hud-accent)]"
+        >
+          Tap any building to identify · ✕
+        </button>
       )}
       {tapMiss && Date.now() - tapMiss < 2200 && (
         <div
