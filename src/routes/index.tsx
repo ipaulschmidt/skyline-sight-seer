@@ -34,6 +34,8 @@ function SkylineARPage() {
   const [demoHeading, setDemoHeading] = useState(180);
   const [selected, setSelected] = useState<BuildingFeature | null>(null);
   const [showCityPicker, setShowCityPicker] = useState(false);
+  const [zoom, setZoom] = useState(1); // 1x .. 3x; narrows FOV and scales video
+  const [tapMode, setTapMode] = useState(false);
 
   const mobile = useMemo(isMobile, []);
 
