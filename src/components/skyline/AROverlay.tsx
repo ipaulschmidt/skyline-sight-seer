@@ -39,10 +39,14 @@ export function AROverlay({
   selectedId,
   onSelect,
   onTapBearing,
+  onNudgeDelta,
+  onNudgeEnd,
   minHeightMeters = 40,
   maxMarkers = 14,
 }: Props) {
   const feedback = useMemo(() => getAllFeedback(), [selectedId]);
+  const dragRef = useRef<{ x: number; y: number; lastX: number; dragging: boolean; width: number } | null>(null);
+  const [nudging, setNudging] = useState(false);
 
   const projected = useMemo<Projected[]>(() => {
     const half = fovDeg / 2;
