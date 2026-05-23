@@ -7,7 +7,7 @@ import {
   correctionBoostFor,
 } from "@/lib/feedback";
 import { loadFovDegrees } from "./FOVCalibration";
-import { ThumbsUp, ThumbsDown } from "lucide-react";
+import { ThumbsUp, ThumbsDown, ChevronRight } from "lucide-react";
 
 interface Props {
   user: LatLng;
