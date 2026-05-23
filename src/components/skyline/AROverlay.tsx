@@ -55,17 +55,22 @@ export function AROverlay({
   // haven't changed meaningfully since the last computation.
   const lastComputedHeadingRef = useRef<number | null>(null);
   const lastComputedTiltRef = useRef<number | null>(null);
+  const lastInputsKeyRef = useRef<string>("");
   const previousResultRef = useRef<Projected[]>([]);
+
+  const inputsKey = `${user.lat.toFixed(5)}|${user.lng.toFixed(5)}|${buildings.length}|${effectiveFov.toFixed(2)}|${viewerHeightMeters.toFixed(1)}|${minHeightMeters}|${maxMarkers}`;
 
   const projected = useMemo<Projected[]>(() => {
     if (
       lastComputedHeadingRef.current !== null &&
       lastComputedTiltRef.current !== null &&
+      lastInputsKeyRef.current === inputsKey &&
       Math.abs(heading - lastComputedHeadingRef.current) < 0.4 &&
       Math.abs(tiltDeg - lastComputedTiltRef.current) < 1
     ) {
       return previousResultRef.current;
     }
+    lastInputsKeyRef.current = inputsKey;
 
     const half = effectiveFov / 2;
     const zoomFactor = effectiveFov / 60;
