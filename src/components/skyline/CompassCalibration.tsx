@@ -184,13 +184,24 @@ export function CompassCalibration({
           </>
         )}
 
-        {phase === "rotate" && onCancel && (
-          <button
-            onClick={onCancel}
-            className="mt-4 w-full rounded-full bg-white/10 px-4 py-2 font-mono-hud text-[10px] uppercase text-white/70"
-          >
-            Skip
-          </button>
+        {phase === "rotate" && (
+          <div className="mt-4 flex gap-2">
+            <button
+              onClick={() => setPhase("tune")}
+              disabled={!canFinishEarly}
+              className="flex-1 rounded-full bg-[var(--hud-accent)] px-4 py-2 font-mono-hud text-[11px] uppercase text-[#001218] disabled:opacity-40"
+            >
+              {canFinishEarly ? "Looks good — continue" : "Keep rotating…"}
+            </button>
+            {onCancel && (
+              <button
+                onClick={onCancel}
+                className="rounded-full bg-white/10 px-4 py-2 font-mono-hud text-[10px] uppercase text-white/70"
+              >
+                Skip
+              </button>
+            )}
+          </div>
         )}
       </div>
     </div>
