@@ -58,6 +58,7 @@ function SkylineARPage() {
   const [floor, setFloor] = useState<number>(0); // 0 = ground; user-set override
   const [showFloorPicker, setShowFloorPicker] = useState(false);
   const [showFovCalibration, setShowFovCalibration] = useState(false);
+  const [fovDeg, setFovDeg] = useState<number>(60);
 
   const mobile = useMemo(isMobile, []);
 
