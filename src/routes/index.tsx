@@ -36,6 +36,7 @@ function SkylineARPage() {
   const [showCityPicker, setShowCityPicker] = useState(false);
   const [zoom, setZoom] = useState(1); // 1x .. 3x; narrows FOV and scales video
   const [tapMode, setTapMode] = useState(false);
+  const [tapMiss, setTapMiss] = useState<number | null>(null); // timestamp of last miss
 
   const mobile = useMemo(isMobile, []);
 
@@ -180,15 +181,22 @@ function SkylineARPage() {
           onTapBearing={
             tapMode
               ? (offset) => {
+                  // Wider base tolerance — 8° at 1x, scaled with zoom.
+                  const tol = Math.max(3, (60 / zoom) * 0.13);
                   const hit = pickBuildingAtBearing(
                     userPos,
                     heading,
                     offset,
                     buildings,
-                    Math.max(2, (60 / zoom) * 0.08),
+                    tol,
                   );
-                  if (hit) setSelected(hit);
-                  setTapMode(false);
+                  if (hit) {
+                    setSelected(hit);
+                    setTapMiss(null);
+                    // Keep tapMode on so the user can re-pick if wrong.
+                  } else {
+                    setTapMiss(Date.now());
+                  }
                 }
               : undefined
           }
@@ -232,7 +240,15 @@ function SkylineARPage() {
 
       {tapMode && (
         <div className="pointer-events-none absolute left-1/2 top-24 z-10 -translate-x-1/2 hud-pill rounded-full px-3 py-1.5 font-mono-hud text-[10px] uppercase text-[var(--hud-accent)]">
-          Tap the building you want to identify
+          Tap the building · tap again to refine
+        </div>
+      )}
+      {tapMiss && Date.now() - tapMiss < 2200 && (
+        <div
+          key={tapMiss}
+          className="pointer-events-none absolute left-1/2 top-36 z-10 -translate-x-1/2 hud-pill rounded-full px-3 py-1.5 font-mono-hud text-[10px] uppercase text-red-300"
+        >
+          No mapped building there — try zooming in or re-tapping
         </div>
       )}
 

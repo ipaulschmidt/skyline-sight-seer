@@ -24,7 +24,7 @@ const OVERPASS_MIRRORS = [
   "https://overpass.private.coffee/api/interpreter",
 ];
 
-const CACHE_VERSION = "v1";
+const CACHE_VERSION = "v2";
 const CACHE_TTL_MS = 1000 * 60 * 60 * 24 * 30; // 30 days
 
 function parseHeight(tag?: string): number | undefined {
@@ -88,11 +88,24 @@ export function listCachedPacks(): { key: string; pack: CachedPack }[] {
 }
 
 function buildQuery(user: LatLng, radiusMeters: number): string {
+  // Pull buildings that have ANY identifying tag — name, brand, operator,
+  // an address, or a recognizable use (shop/amenity/tourism/office). This
+  // catches landmarks like "Harley-Davidson Honolulu" that lack a `name`
+  // tag but do have `shop` or `brand`. Falls back to address when needed.
+  const a = `around:${radiusMeters},${user.lat},${user.lng}`;
   return `
     [out:json][timeout:25];
     (
-      way["building"]["name"](around:${radiusMeters},${user.lat},${user.lng});
-      relation["building"]["name"](around:${radiusMeters},${user.lat},${user.lng});
+      way["building"]["name"](${a});
+      relation["building"]["name"](${a});
+      way["building"]["brand"](${a});
+      way["building"]["operator"](${a});
+      way["building"]["shop"](${a});
+      way["building"]["amenity"](${a});
+      way["building"]["tourism"](${a});
+      way["building"]["office"](${a});
+      way["building"]["addr:housename"](${a});
+      way["building"]["addr:housenumber"](${a});
     );
     out center tags;
   `;
@@ -187,12 +200,34 @@ export async function loadAreaPack(
   throw new Error(lastErr || "All Overpass mirrors failed");
 }
 
+function deriveName(tags: Record<string, string>): string | null {
+  const direct =
+    tags.name ||
+    tags["name:en"] ||
+    tags.brand ||
+    tags.operator ||
+    tags["addr:housename"];
+  if (direct) return direct;
+  // Synthesize from address
+  const hn = tags["addr:housenumber"];
+  const street = tags["addr:street"];
+  if (hn && street) return `${hn} ${street}`;
+  if (street) return street;
+  // Synthesize from use
+  const use = tags.shop || tags.amenity || tags.tourism || tags.office;
+  if (use) {
+    const pretty = use.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
+    return pretty;
+  }
+  return null;
+}
+
 function normalize(elements: OverpassElement[]): BuildingFeature[] {
   const seen = new Set<string>();
   const out: BuildingFeature[] = [];
   for (const el of elements) {
     const tags = el.tags ?? {};
-    const name = tags.name;
+    const name = deriveName(tags);
     if (!name) continue;
     const lat = el.lat ?? el.center?.lat;
     const lng = el.lon ?? el.center?.lon;
@@ -213,9 +248,10 @@ function normalize(elements: OverpassElement[]): BuildingFeature[] {
       levels,
     });
   }
-  // Prefer taller / more notable buildings first
+  // Prefer taller / more notable buildings first, but keep up to 1200 so
+  // smaller landmarks remain pickable via tap-to-label.
   out.sort((a, b) => (b.heightMeters ?? 0) - (a.heightMeters ?? 0));
-  return out.slice(0, 400);
+  return out.slice(0, 1200);
 }
 
 /** Legacy alias kept so other call sites keep compiling. */
