@@ -1,14 +1,13 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useCamera } from "@/hooks/useCamera";
 import { useDeviceOrientation } from "@/hooks/useDeviceOrientation";
 import { useGeolocation } from "@/hooks/useGeolocation";
+import { useAreaPack } from "@/hooks/useAreaPack";
 import {
   DEMO_BUILDINGS,
   DEMO_CITIES,
   DEMO_LOCATION,
-  loadAreaPack,
-  readPack,
   type BuildingFeature,
   type LoadStatus,
 } from "@/lib/overpass";
@@ -34,12 +33,7 @@ function SkylineARPage() {
   const [demoCity, setDemoCity] = useState<LatLng>(DEMO_LOCATION);
   const [demoHeading, setDemoHeading] = useState(180);
   const [selected, setSelected] = useState<BuildingFeature | null>(null);
-  const [buildings, setBuildings] = useState<BuildingFeature[]>([]);
-  const [packStatus, setPackStatus] = useState<LoadStatus | null>(null);
-  const [fetchError, setFetchError] = useState<string | null>(null);
-  const [packFromCache, setPackFromCache] = useState(false);
   const [showCityPicker, setShowCityPicker] = useState(false);
-  const reloadKey = useRef(0);
 
   const mobile = useMemo(isMobile, []);
 
@@ -55,67 +49,32 @@ function SkylineARPage() {
     await orientation.request();
   };
 
-  // Load area pack whenever the user position changes
-  useEffect(() => {
-    if (demoMode && userPos === DEMO_LOCATION && !readPack(DEMO_LOCATION, 5000)) {
-      // No need to hit network for the canned NYC demo
-      setBuildings(DEMO_BUILDINGS);
-      setPackStatus({ kind: "cache-hit", buildings: DEMO_BUILDINGS });
-      setPackFromCache(true);
-      return;
-    }
-    if (!userPos) return;
+  // Smart fetcher: cache-first, distance-gated, throttled, debounced
+  const pack = useAreaPack(userPos, {
+    enabled: !!userPos,
+    minMoveMeters: 400,    // ignore GPS jitter under ~400m
+    minIntervalMs: 30_000, // at most one network fetch per 30s
+    debounceMs: 1500,      // wait 1.5s of stability before fetching
+    radiusMeters: 5000,
+  });
 
-    const ac = new AbortController();
-    setFetchError(null);
-    setPackFromCache(false);
-    setPackStatus({ kind: "downloading", mirror: "", attempt: 0 });
-
-    loadAreaPack(userPos, {
-      radiusMeters: 5000,
-      signal: ac.signal,
-      onStatus: (s) => {
-        setPackStatus(s);
-        if (s.kind === "cache-hit") setPackFromCache(true);
-      },
-    })
-      .then((b) => {
-        setBuildings(b);
-        if (b.length === 0 && demoMode) {
-          // Fall back to canned demo if the API returned nothing useful
-          setBuildings(DEMO_BUILDINGS);
-        }
-      })
-      .catch((e) => {
-        if ((e as Error).name === "AbortError") return;
-        // Final fallback: canned NYC dataset so the UI still has something
-        setBuildings(DEMO_BUILDINGS);
-        setFetchError((e as Error).message ?? "Load failed");
-      });
-
-    return () => ac.abort();
-  }, [userPos?.lat, userPos?.lng, demoMode, reloadKey.current]);
+  // Final fallback so the screen is never empty
+  const buildings: BuildingFeature[] =
+    pack.buildings.length > 0
+      ? pack.buildings
+      : pack.error
+        ? DEMO_BUILDINGS
+        : [];
+  const packStatus: LoadStatus | null = pack.status;
+  const fetchError = pack.error;
+  const packFromCache = pack.fromCache;
 
   // Desktop auto-demo
   useEffect(() => {
     if (started && !mobile && !demoMode) setDemoMode(true);
   }, [started, mobile, demoMode]);
 
-  const retryPack = () => {
-    reloadKey.current += 1;
-    setFetchError(null);
-    setBuildings([]);
-    setPackStatus({ kind: "downloading", mirror: "", attempt: 0 });
-    if (userPos) {
-      loadAreaPack(userPos, {
-        radiusMeters: 5000,
-        forceRefresh: true,
-        onStatus: setPackStatus,
-      })
-        .then(setBuildings)
-        .catch((e) => setFetchError((e as Error).message));
-    }
-  };
+  const retryPack = () => pack.refresh();
 
   const pickCity = (loc: LatLng) => {
     setDemoCity(loc);
