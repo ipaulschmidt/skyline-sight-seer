@@ -302,7 +302,28 @@ function SkylineARPage() {
               <Compass className="h-4 w-4" />
             </button>
           )}
+          <button
+            onClick={() => setShowFloorPicker(true)}
+            className={`hud-pill flex h-10 w-10 flex-col items-center justify-center rounded-full ${
+              floor > 0 ? "text-[var(--hud-accent)]" : ""
+            }`}
+            aria-label="Set your floor"
+            title={floor > 0 ? `Floor ${floor} (~${Math.round(floor * FLOOR_HEIGHT_M)}m up)` : "Ground floor"}
+          >
+            <Building2 className="h-4 w-4" />
+            <span className="font-mono-hud text-[8px] leading-none mt-0.5">
+              {floor > 0 ? `F${floor}` : "G"}
+            </span>
+          </button>
         </div>
+      )}
+
+      {showFloorPicker && (
+        <FloorPicker
+          floor={floor}
+          onChange={setFloor}
+          onClose={() => setShowFloorPicker(false)}
+        />
       )}
 
       {tapMode && (
