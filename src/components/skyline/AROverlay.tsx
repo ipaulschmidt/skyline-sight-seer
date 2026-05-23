@@ -186,7 +186,8 @@ export function AROverlay({
 
 /**
  * Pick the best-matching building for a tap at the given bearing offset.
- * Prefers buildings near the tap bearing, weighted by notability (height/√distance).
+ * Two-pass: first within tight tolerance preferring tighter+notable, then a
+ * wider sweep if nothing matched. Never excludes small buildings.
  */
 export function pickBuildingAtBearing(
   user: LatLng,
@@ -196,17 +197,28 @@ export function pickBuildingAtBearing(
   toleranceDeg = 5,
 ): BuildingFeature | null {
   const targetBearing = (heading + bearingOffsetDeg + 360) % 360;
-  let best: { b: BuildingFeature; score: number } | null = null;
-  for (const b of buildings) {
-    const dist = distanceMeters(user, { lat: b.lat, lng: b.lng });
-    if (dist < 30 || dist > 5000) continue;
-    const brng = bearingDeg(user, { lat: b.lat, lng: b.lng });
-    const delta = Math.abs(angularDelta(targetBearing, brng));
-    if (delta > toleranceDeg) continue;
-    const h = b.heightMeters ?? (b.levels ? b.levels * 3.2 : 10);
-    // Tighter bearing wins; ties broken by notability
-    const score = (toleranceDeg - delta) * 100 + h / Math.sqrt(dist);
-    if (!best || score > best.score) best = { b, score };
-  }
-  return best?.b ?? null;
+
+  const score = (delta: number, dist: number, h: number, tol: number) =>
+    (tol - delta) * 100 + (h || 5) / Math.sqrt(Math.max(dist, 1));
+
+  const search = (tol: number, maxDist: number) => {
+    let best: { b: BuildingFeature; score: number } | null = null;
+    for (const b of buildings) {
+      const dist = distanceMeters(user, { lat: b.lat, lng: b.lng });
+      if (dist < 5 || dist > maxDist) continue;
+      const brng = bearingDeg(user, { lat: b.lat, lng: b.lng });
+      const delta = Math.abs(angularDelta(targetBearing, brng));
+      if (delta > tol) continue;
+      const h = b.heightMeters ?? (b.levels ? b.levels * 3.2 : 10);
+      const s = score(delta, dist, h, tol);
+      if (!best || s > best.score) best = { b, score: s };
+    }
+    return best?.b ?? null;
+  };
+
+  return (
+    search(toleranceDeg, 5000) ||
+    search(toleranceDeg * 2, 5000) ||
+    search(toleranceDeg * 3, 8000)
+  );
 }
