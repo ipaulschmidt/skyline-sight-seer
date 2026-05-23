@@ -258,12 +258,33 @@ function SkylineARPage() {
                   if (hit) {
                     setSelected(hit);
                     setTapMiss(null);
-                  } else {
-                    setTapMiss(Date.now());
+                    return;
                   }
+                  // No labeled building hit — fire the lightweight
+                  // identify-by-location flow. The pulse animation already
+                  // fired inside the overlay, so the user sees feedback.
+                  setTapMiss(null);
+                  const targetBearing = (heading + offset + 360) % 360;
+                  const estDistance = 500; // rough lookup point
+                  const target = bearingAndDistanceToLatLng(
+                    userPos.lat,
+                    userPos.lng,
+                    targetBearing,
+                    estDistance,
+                  );
+                  void reverseGeocode(target.lat, target.lng).then((r) => {
+                    const d = distanceMeters(userPos, { lat: r.lat, lng: r.lng });
+                    setSelected(null);
+                    setLocationResult({
+                      ...r,
+                      distanceMeters: d,
+                      bearingDeg: targetBearing,
+                    });
+                  });
                 }
               : undefined
           }
+
         />
       )}
 
