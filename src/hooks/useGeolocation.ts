@@ -43,11 +43,10 @@ export function useGeolocation(enabled: boolean) {
     setState((s) => ({ ...s, loading: true, timedOut: false, error: null }));
 
     softTimer.current = window.setTimeout(() => {
-      setState((s) =>
-        s.position
-          ? s
-          : { ...s, timedOut: true, loading: false, error: s.error ?? "GPS is taking too long" },
-      );
+      // Soft timeout: flag it for diagnostics but DON'T treat as an error.
+      // GPS can take a while indoors; we keep waiting silently and only
+      // surface a problem if the browser reports an actual error.
+      setState((s) => (s.position ? s : { ...s, timedOut: true }));
     }, SOFT_TIMEOUT_MS);
 
     const id = navigator.geolocation.watchPosition(
