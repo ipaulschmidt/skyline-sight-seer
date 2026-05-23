@@ -7,7 +7,36 @@ export interface BuildingFeature {
   lng: number;
   heightMeters?: number;
   levels?: number;
+  /** Raw OSM tags retained for the info sheet (architect, year, address, wikidata, etc.). */
+  osmTags?: Record<string, string>;
 }
+
+/** Tags we surface in the info sheet. Anything not in this list is dropped to keep the cache small. */
+const RETAINED_TAGS = [
+  "architect",
+  "start_date",
+  "building",
+  "building:material",
+  "operator",
+  "addr:housenumber",
+  "addr:street",
+  "addr:city",
+  "website",
+  "contact:website",
+  "opening_hours",
+  "heritage",
+  "heritage:operator",
+  "description",
+  "roof:shape",
+  "wikidata",
+  "wikipedia",
+  "brand",
+  "shop",
+  "amenity",
+  "tourism",
+  "office",
+  "tourism",
+] as const;
 
 interface OverpassElement {
   type: "node" | "way" | "relation";
