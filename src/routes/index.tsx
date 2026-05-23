@@ -1,5 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useCamera } from "@/hooks/useCamera";
 import { useDeviceOrientation } from "@/hooks/useDeviceOrientation";
 import { useGeolocation } from "@/hooks/useGeolocation";
@@ -59,16 +59,9 @@ function SkylineARPage() {
   const heading = demoMode ? rawHeading : applyCompassOffset(rawHeading, compassOffset);
 
   // Load saved offset on mount
-  const offsetLoaded = useRef(false);
   useEffect(() => {
     setCompassOffset(loadCompassOffset());
-    offsetLoaded.current = true;
   }, []);
-  // Persist compass offset whenever it changes (after initial load)
-  useEffect(() => {
-    if (!offsetLoaded.current) return;
-    saveCompassOffset(compassOffset);
-  }, [compassOffset]);
 
   // First-time calibration: when heading first becomes available on mobile and
   // we have no prior calibration this session, prompt the user.
@@ -211,20 +204,6 @@ function SkylineARPage() {
           fovDeg={60 / zoom}
           selectedId={selected?.id ?? null}
           onSelect={(b) => setSelected(b)}
-          onNudgeDelta={
-            demoMode
-              ? undefined
-              : (deltaDeg) =>
-                  setCompassOffset((prev) => {
-                    const next = prev + deltaDeg;
-                    // clamp to [-180, 180]
-                    return ((next + 540) % 360) - 180;
-                  })
-          }
-          onNudgeEnd={demoMode ? undefined : () => {
-            saveCompassOffset(compassOffset);
-            setCalibratedThisSession(true);
-          }}
           onTapBearing={
             tapMode
               ? (offset) => {
