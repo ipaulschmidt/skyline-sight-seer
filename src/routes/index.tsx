@@ -315,6 +315,27 @@ function SkylineARPage() {
               {floor > 0 ? `F${floor}` : "G"}
             </span>
           </button>
+          {!demoMode && (
+            <button
+              onClick={() => geo.refresh()}
+              disabled={geo.refreshing}
+              className={`hud-pill flex h-10 w-10 items-center justify-center rounded-full ${
+                geo.refreshing ? "text-[var(--hud-accent)]" : ""
+              } disabled:opacity-60`}
+              aria-label="Re-check my coordinates"
+              title={
+                geo.accuracy != null
+                  ? `Re-check GPS · ±${Math.round(geo.accuracy)}m`
+                  : "Re-check my coordinates"
+              }
+            >
+              {geo.refreshing ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <LocateFixed className="h-4 w-4" />
+              )}
+            </button>
+          )}
         </div>
       )}
 
