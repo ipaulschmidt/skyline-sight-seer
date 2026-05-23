@@ -138,7 +138,7 @@ export function AROverlay({
       // (elevationDeg > tiltDeg) should sit above center.
       let yPct = 50 - ((elevationDeg - tiltDeg) / halfV) * 50;
       yPct = Math.max(5, Math.min(85, yPct));
-      const scale = Math.max(0.7, Math.min(1.1, 1.15 - p.distance / 6000));
+      const scale = Math.max(0.88, Math.min(1.0, 1.05 - p.distance / 8000));
       const baseScore =
         p.h / Math.sqrt(Math.max(p.distance, 1)) + (50 / Math.max(p.distance, 50)) * 1000;
       const score =
