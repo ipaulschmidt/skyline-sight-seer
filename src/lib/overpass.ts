@@ -268,6 +268,14 @@ function normalize(elements: OverpassElement[]): BuildingFeature[] {
     const key = name + "|" + lat.toFixed(4) + "|" + lng.toFixed(4);
     if (seen.has(key)) continue;
     seen.add(key);
+
+    // Retain only the tags we surface, to keep cache size reasonable.
+    const osmTags: Record<string, string> = {};
+    for (const k of RETAINED_TAGS) {
+      const v = tags[k];
+      if (v) osmTags[k] = v;
+    }
+
     out.push({
       id: `${el.type}/${el.id}`,
       name,
@@ -275,6 +283,7 @@ function normalize(elements: OverpassElement[]): BuildingFeature[] {
       lng,
       heightMeters: heightMeters ?? (levels ? levels * 3.2 : undefined),
       levels,
+      osmTags: Object.keys(osmTags).length ? osmTags : undefined,
     });
   }
   // Prefer taller / more notable buildings first, but keep up to 1200 so
