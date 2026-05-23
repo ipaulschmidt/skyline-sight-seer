@@ -50,6 +50,8 @@ function SkylineARPage() {
   const [compassOffset, setCompassOffset] = useState(0);
   const [showCalibration, setShowCalibration] = useState(false);
   const [calibratedThisSession, setCalibratedThisSession] = useState(false);
+  const [floor, setFloor] = useState<number>(0); // 0 = ground; user-set override
+  const [showFloorPicker, setShowFloorPicker] = useState(false);
 
   const mobile = useMemo(isMobile, []);
 
