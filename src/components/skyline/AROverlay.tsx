@@ -241,10 +241,11 @@ export function pickBuildingAtBearing(
   bearingOffsetDeg: number,
   buildings: BuildingFeature[],
   toleranceDeg = 5,
+  viewerHeightMeters = 1.6,
 ): BuildingFeature | null {
   const targetBearing = (heading + bearingOffsetDeg + 360) % 360;
+  const eye = Math.max(0, viewerHeightMeters);
 
-  // Gather all in-cone candidates with apparent height.
   interface Cand {
     b: BuildingFeature;
     delta: number;
@@ -261,7 +262,7 @@ export function pickBuildingAtBearing(
       const delta = Math.abs(angularDelta(targetBearing, brng));
       if (delta > tol) continue;
       const h = b.heightMeters ?? (b.levels ? b.levels * 3.2 : 10);
-      out.push({ b, delta, dist, h, angTop: Math.atan2(h, dist) });
+      out.push({ b, delta, dist, h, angTop: Math.atan2(h - eye, dist) });
     }
     return out;
   };
@@ -272,7 +273,10 @@ export function pickBuildingAtBearing(
     const byDist = [...cands].sort((a, b) => a.dist - b.dist);
     for (const c of byDist) {
       const blocked = byDist.some(
-        (n) => n.dist < c.dist - 20 && n.angTop >= c.angTop * 0.95,
+        (n) =>
+          n.dist < c.dist - 20 &&
+          n.angTop > 0 &&
+          n.angTop >= c.angTop * 0.95,
       );
       if (!blocked) return c.b;
     }
