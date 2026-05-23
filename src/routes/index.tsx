@@ -319,6 +319,19 @@ function SkylineARPage() {
               <Compass className="h-4 w-4" />
             </button>
           )}
+          {!demoMode && (
+            <button
+              onClick={() => setShowFovCalibration(true)}
+              className="hud-pill flex h-10 w-10 flex-col items-center justify-center rounded-full"
+              aria-label="Calibrate camera field of view"
+              title={`Calibrate FOV · ${Math.round(fovDeg)}°`}
+            >
+              <Scan className="h-4 w-4" />
+              <span className="font-mono-hud text-[8px] leading-none mt-0.5">
+                {Math.round(fovDeg)}°
+              </span>
+            </button>
+          )}
           <button
             onClick={() => setShowFloorPicker(true)}
             className={`hud-pill flex h-10 w-10 flex-col items-center justify-center rounded-full ${
