@@ -119,10 +119,10 @@ export function listCachedPacks(): { key: string; pack: CachedPack }[] {
 }
 
 function buildQuery(user: LatLng, radiusMeters: number): string {
-  // Pull buildings that have ANY identifying tag — name, brand, operator,
-  // an address, or a recognizable use (shop/amenity/tourism/office). This
-  // catches landmarks like "Harley-Davidson Honolulu" that lack a `name`
-  // tag but do have `shop` or `brand`. Falls back to address when needed.
+  // Pull buildings with any identifying tag (name, brand, operator, address,
+  // shop/amenity/etc.). Also pull substantial unnamed buildings (8+ floors or
+  // any building with a height tag) so they can still be tapped — they get
+  // a placeholder name and are excluded from the auto AR labels.
   const a = `around:${radiusMeters},${user.lat},${user.lng}`;
   return `
     [out:json][timeout:25];
@@ -137,6 +137,8 @@ function buildQuery(user: LatLng, radiusMeters: number): string {
       way["building"]["office"](${a});
       way["building"]["addr:housename"](${a});
       way["building"]["addr:housenumber"](${a});
+      way["building"]["height"](${a});
+      way["building"]["building:levels"~"^([89]|[1-9][0-9])$"](${a});
     );
     out center tags;
   `;
