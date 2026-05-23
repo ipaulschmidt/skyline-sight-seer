@@ -64,10 +64,33 @@ function SkylineARPage() {
   // Apply calibration offset (skip in demo mode — slider is the source of truth).
   const heading = demoMode ? rawHeading : applyCompassOffset(rawHeading, compassOffset);
 
-  // Load saved offset on mount
+  // Load saved offset + floor on mount
   useEffect(() => {
     setCompassOffset(loadCompassOffset());
+    if (typeof window !== "undefined") {
+      const saved = window.localStorage.getItem(FLOOR_STORAGE_KEY);
+      if (saved != null) {
+        const n = parseInt(saved, 10);
+        if (Number.isFinite(n)) setFloor(n);
+      }
+    }
   }, []);
+
+  // Persist floor changes
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      window.localStorage.setItem(FLOOR_STORAGE_KEY, String(floor));
+    }
+  }, [floor]);
+
+  // Viewer eye height above local ground in meters.
+  // Manual floor wins; otherwise fall back to GPS altitude only when it looks
+  // reasonable (accuracy < 30m). GPS altitude is unreliable indoors and on
+  // high floors, so we only use it as a hint.
+  const viewerHeightMeters = useMemo(() => {
+    if (floor > 0) return floor * FLOOR_HEIGHT_M + EYE_OFFSET_M;
+    return EYE_OFFSET_M;
+  }, [floor]);
 
   // First-time calibration: when heading first becomes available on mobile and
   // we have no prior calibration this session, prompt the user.
