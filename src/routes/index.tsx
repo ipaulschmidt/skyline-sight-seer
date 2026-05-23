@@ -204,6 +204,20 @@ function SkylineARPage() {
           fovDeg={60 / zoom}
           selectedId={selected?.id ?? null}
           onSelect={(b) => setSelected(b)}
+          onNudgeDelta={
+            demoMode
+              ? undefined
+              : (deltaDeg) =>
+                  setCompassOffset((prev) => {
+                    const next = prev + deltaDeg;
+                    // clamp to [-180, 180]
+                    return ((next + 540) % 360) - 180;
+                  })
+          }
+          onNudgeEnd={demoMode ? undefined : () => {
+            saveCompassOffset(compassOffset);
+            setCalibratedThisSession(true);
+          }}
           onTapBearing={
             tapMode
               ? (offset) => {
