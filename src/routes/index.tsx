@@ -581,6 +581,68 @@ function CenterMsg({
   );
 }
 
+function FloorPicker({
+  floor,
+  onChange,
+  onClose,
+}: {
+  floor: number;
+  onChange: (n: number) => void;
+  onClose: () => void;
+}) {
+  const presets = [0, 5, 10, 20, 30, 50, 80];
+  return (
+    <div className="absolute inset-0 z-30 flex items-center justify-center bg-black/70 backdrop-blur-md">
+      <div className="hud-pill w-[min(420px,92vw)] rounded-3xl p-6">
+        <div className="mb-1 font-display text-xl font-semibold text-white">Your floor</div>
+        <div className="mb-4 font-mono-hud text-[10px] uppercase text-white/60">
+          Helps labels match what you actually see over nearby rooftops
+        </div>
+        <div className="mb-4 flex items-baseline justify-between">
+          <div>
+            <div className="font-display text-3xl font-semibold text-[var(--hud-accent)]">
+              {floor === 0 ? "Ground" : `Floor ${floor}`}
+            </div>
+            <div className="font-mono-hud text-[10px] text-white/60">
+              ~{Math.round(floor * FLOOR_HEIGHT_M + EYE_OFFSET_M)}m above street
+            </div>
+          </div>
+        </div>
+        <input
+          type="range"
+          min={0}
+          max={120}
+          value={floor}
+          onChange={(e) => onChange(parseInt(e.target.value))}
+          className="w-full accent-[var(--hud-accent)]"
+        />
+        <div className="mt-3 flex flex-wrap gap-1.5">
+          {presets.map((f) => (
+            <button
+              key={f}
+              onClick={() => onChange(f)}
+              className={`rounded-full px-3 py-1 font-mono-hud text-[10px] uppercase transition ${
+                floor === f
+                  ? "bg-[var(--hud-accent)] text-[#001218]"
+                  : "bg-white/10 text-white/80 hover:bg-white/20"
+              }`}
+            >
+              {f === 0 ? "Ground" : `F${f}`}
+            </button>
+          ))}
+        </div>
+        <button
+          onClick={onClose}
+          className="mt-5 w-full rounded-full bg-white/10 px-4 py-2 font-mono-hud text-[10px] uppercase text-white/70"
+        >
+          Done
+        </button>
+      </div>
+    </div>
+  );
+}
+
+
 function BackgroundGlow() {
   return (
     <>
