@@ -22,7 +22,7 @@ import {
   saveCompassOffset,
   applyCompassOffset,
 } from "@/components/skyline/CompassCalibration";
-import { Loader2, Smartphone, RotateCw, Download, MapPin, CheckCircle2, RefreshCw, ZoomIn, ZoomOut, Crosshair, Compass, Building2 } from "lucide-react";
+import { Loader2, Smartphone, RotateCw, Download, MapPin, CheckCircle2, RefreshCw, ZoomIn, ZoomOut, Crosshair, Compass, Building2, LocateFixed } from "lucide-react";
 
 const FLOOR_HEIGHT_M = 3.5;
 const EYE_OFFSET_M = 1.6;
@@ -315,6 +315,27 @@ function SkylineARPage() {
               {floor > 0 ? `F${floor}` : "G"}
             </span>
           </button>
+          {!demoMode && (
+            <button
+              onClick={() => geo.refresh()}
+              disabled={geo.refreshing}
+              className={`hud-pill flex h-10 w-10 items-center justify-center rounded-full ${
+                geo.refreshing ? "text-[var(--hud-accent)]" : ""
+              } disabled:opacity-60`}
+              aria-label="Re-check my coordinates"
+              title={
+                geo.accuracy != null
+                  ? `Re-check GPS · ±${Math.round(geo.accuracy)}m`
+                  : "Re-check my coordinates"
+              }
+            >
+              {geo.refreshing ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <LocateFixed className="h-4 w-4" />
+              )}
+            </button>
+          )}
         </div>
       )}
 
