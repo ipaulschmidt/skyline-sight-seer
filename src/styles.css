@@ -212,3 +212,13 @@
   50% { opacity: 1; transform: scaleX(1.05); }
 }
 
+@keyframes tap-pulse {
+  0% { transform: translate(-50%, -50%) scale(0.4); opacity: 0.9; }
+  100% { transform: translate(-50%, -50%) scale(2.4); opacity: 0; }
+}
+
+.tap-pulse {
+  animation: tap-pulse 600ms ease-out forwards;
+}
+
+
