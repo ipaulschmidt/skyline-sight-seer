@@ -113,7 +113,7 @@ function copyFeedbackString(building: BuildingFeature) {
   }
 }
 
-export function BuildingInfoSheet({ building, onClose, userLocation }: Props) {
+export function BuildingInfoSheet({ building, onClose, userLocation, locationResult }: Props) {
   const [info, setInfo] = useState<BuildingEnrichment | null>(null);
   const [loading, setLoading] = useState(false);
   const [copied, setCopied] = useState(false);
