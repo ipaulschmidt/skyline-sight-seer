@@ -22,7 +22,11 @@ import {
   saveCompassOffset,
   applyCompassOffset,
 } from "@/components/skyline/CompassCalibration";
-import { Loader2, Smartphone, RotateCw, Download, MapPin, CheckCircle2, RefreshCw, ZoomIn, ZoomOut, Crosshair, Compass } from "lucide-react";
+import { Loader2, Smartphone, RotateCw, Download, MapPin, CheckCircle2, RefreshCw, ZoomIn, ZoomOut, Crosshair, Compass, Building2 } from "lucide-react";
+
+const FLOOR_HEIGHT_M = 3.5;
+const EYE_OFFSET_M = 1.6;
+const FLOOR_STORAGE_KEY = "skyline.viewer.floor";
 
 export const Route = createFileRoute("/")({
   component: SkylineARPage,
