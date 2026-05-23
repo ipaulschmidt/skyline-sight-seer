@@ -240,7 +240,15 @@ function SkylineARPage() {
 
       {tapMode && (
         <div className="pointer-events-none absolute left-1/2 top-24 z-10 -translate-x-1/2 hud-pill rounded-full px-3 py-1.5 font-mono-hud text-[10px] uppercase text-[var(--hud-accent)]">
-          Tap the building you want to identify
+          Tap the building · tap again to refine
+        </div>
+      )}
+      {tapMiss && Date.now() - tapMiss < 2200 && (
+        <div
+          key={tapMiss}
+          className="pointer-events-none absolute left-1/2 top-36 z-10 -translate-x-1/2 hud-pill rounded-full px-3 py-1.5 font-mono-hud text-[10px] uppercase text-red-300"
+        >
+          No mapped building there — try zooming in or re-tapping
         </div>
       )}
 
