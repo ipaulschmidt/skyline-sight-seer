@@ -1,124 +1,102 @@
-# Skyline AR Viewer
+# SkylineAR
 
-Here’s your Lovable/v0 prompt, ready to paste:
+**Point your phone at a city skyline and see what every building is called.** SkylineAR does for cities what PeakFinder does for mountains. It shows live building labels on top of your camera view, using your GPS position, compass heading and open map data. You don't need to install an app or create an account.
 
-PROMPT:
+**Live app:** https://skyline-sight-seer.lovable.app
 
-Build a web-based AR city skyline viewer called SkylineAR — the urban equivalent of PeakFinder. When a user opens the app on their phone, it activates the rear camera and overlays labeled building markers on the live video feed based on their GPS position and compass heading.
+---
 
-Core Functionality
+## How It Works
 
-	1.	Camera + AR Overlay
+1. **Open the app on your phone.** SkylineAR asks for camera, location and motion-sensor access on one short permission screen.
+2. **The app finds your position.** It gets a GPS fix. You can tap **Locate** at any time to get a fresh, high-accuracy fix.
+3. **It downloads an area pack.** Named buildings near you are loaded from OpenStreetMap and saved on your device. Moving around a little won't trigger a new download.
+4. **Point the camera.** Labels follow each building's real bearing and height. Each label shows the building's name, height or floor count, and distance. The compass at the top shows which way you're facing.
+5. **Tap to learn more.** Tapping a label opens an info sheet with the building type, address, year built, architect, heritage status and a short description. Data comes from Wikidata, Wikipedia and OpenStreetMap.
+6. **Tap anything else.** If you tap a spot with no label, the app estimates that location from your compass heading and looks up the address.
 
-	•	Use getUserMedia to stream the rear camera as a full-screen background
+On desktop, a **demo mode** shows real skyline data for NYC or other cities. You turn the view with a heading slider.
 
-	•	Use the DeviceOrientation API (compass heading + pitch/tilt) to determine what direction the user is facing
+## Key Capabilities
 
-	•	Use the Geolocation API to get the user’s current lat/lng
+- **Offline-friendly area packs.** Building data is cached on your device for 30 days. The app tries several Overpass servers and falls back to older cached data if the network fails. Requests are rate-limited by distance moved and by time.
+- **Fewer, more accurate labels.** The app scores each building by height and how notable it is. Buildings behind closer, taller buildings are hidden. Labels pointing in nearly the same direction are grouped, and the number of labels on screen is capped.
+- **Overlap handling.** Tapping a group of labels spreads them out, and a cycle button steps through the labels near your selection.
+- **Digital zoom (1×–3×).** Zooming narrows the field of view and reveals more and smaller buildings. Labels stay the same size, so they're always readable.
+- **Sensor accuracy tools:**
+  - Magnetic declination correction from NOAA, so labels line up with true north instead of magnetic north
+  - Pitch-aware vertical placement, so labels move when you tilt the phone
+  - Optional compass calibration and field-of-view (FOV) calibration
+  - A floor picker (0–120) that sets your eye height for viewing from high floors
+- **Corrections and feedback.** You can mark a label as wrong, choose the right building from nearby candidates, or type a name. Corrections are saved on your device and lower the ranking of wrong matches.
+- **Graceful fallbacks.** If you deny camera or location access, if GPS is slow, or if there are no buildings nearby, the app shows a clear screen with a way to retry.
 
-	2.	Building Data
+## Tech Stack & Architecture
 
-	•	Fetch nearby buildings from the OpenStreetMap Overpass API using this endpoint: https://overpass-api.de/api/interpreter
+| Layer | Technology |
+| --- | --- |
+| Framework | React 19, TanStack Start v1 (file-based routing), Vite 7 |
+| Styling | Tailwind CSS v4 (theme tokens in `src/styles.css`), shadcn/ui primitives |
+| Hosting | Edge runtime (Cloudflare Workers via `wrangler.jsonc`) |
+| Building data | OpenStreetMap Overpass API |
+| Enrichment | Wikidata entity API, Wikipedia REST summaries |
+| Geocoding / declination | Nominatim reverse geocoding, NOAA geomagnetic calculator |
+| Device APIs | `getUserMedia`, Geolocation, DeviceOrientation |
 
-	•	Query for building nodes/ways within a 5km radius that have name and height or building:levels tags
+The app runs entirely in the browser. It needs no backend, database or API keys. All positioning math runs on the device: haversine distance, bearing, forward projection and occlusion.
 
-	•	Calculate bearing and distance from user to each building
+```text
+src/
+├── routes/index.tsx            Main AR screen: wires sensors, data and UI
+├── components/skyline/
+│   ├── AROverlay.tsx           Projection, filtering, clustering, label layout
+│   ├── BuildingInfoSheet.tsx   Bottom-sheet details and corrections
+│   ├── CompassHUD.tsx          Heading indicator
+│   ├── CompassCalibration.tsx  Compass offset flow
+│   ├── FOVCalibration.tsx      Two-landmark field-of-view calibration
+│   └── PermissionGate.tsx      Permission and fallback screens
+├── hooks/
+│   ├── useAreaPack.ts          Cache-first, rate-limited building loading
+│   ├── useCamera.ts            Rear camera stream
+│   ├── useDeviceOrientation.ts Heading, tilt, declination correction
+│   └── useGeolocation.ts       GPS fixes and manual refresh
+└── lib/
+    ├── geo.ts                  Distance, bearing, destination-point math
+    ├── overpass.ts             Overpass queries, mirrors, tag parsing
+    ├── wikidata.ts / wikipedia.ts  Enrichment lookups with caching
+    ├── reverseGeocode.ts       Nominatim lookups for unlabeled taps
+    └── feedback.ts             Local correction storage and scoring
+```
 
-	•	Only render buildings within the current field of view (~60° horizontal FOV)
+## Local Development
 
-	3.	AR Label Rendering
-
-	•	Project each in-range building into 2D screen coordinates based on compass bearing offset from screen center
-
-	•	Render as floating label cards above the building’s horizon position
-
-	•	Each label shows: Building Name (large) + Height in meters / floors (small) + a thin vertical line dropping to the horizon
-
-	•	Labels should scale slightly with distance (closer = slightly larger)
-
-	•	Use a <canvas> or absolutely-positioned <div> overlay on top of the video feed
-
-	4.	Tap to Info Card
-
-	•	Tapping a label pauses the overlay and opens a bottom sheet info card
-
-	•	The card fetches a summary from the Wikipedia API: https://en.wikipedia.org/api/rest_v1/page/summary/{building_name}
-
-	•	Info card shows: building name, Wikipedia extract (2–3 sentences), height, and a “Read more on Wikipedia” link
-
-	•	Card dismisses on tap outside or swipe down
-
-UI / Visual Design
-
-	•	Dark, cinematic aesthetic — think heads-up display / mission control
-
-	•	Overlay labels: white text, thin 1px white line, semi-transparent dark pill background with subtle backdrop blur
-
-	•	Selected building label: accent highlight in electric blue #00BFFF
-
-	•	Bottom info card: dark glass morphism panel, rounded top corners, building name in a tall condensed display font, body text in a clean mono or sans
-
-	•	Compass/heading indicator at the top center of the screen showing current bearing in degrees
-
-	•	Small “calibrate compass” nudge prompt on first load
-
-	•	Permission screens for camera and location should be minimal and on-brand
-
-Permissions + Edge Cases
-
-	•	Handle camera permission denied gracefully with a fallback screen
-
-	•	Handle geolocation unavailable or denied
-
-	•	If no building data returns for a location, show: “No named buildings found nearby. Try moving to a city center.”
-
-	•	Add a loading shimmer state while Overpass data fetches
-
-	•	Desktop fallback: show a static demo mode using NYC buildings with a “This experience is designed for mobile” banner
-
-Tech Stack
-
-	•	React + Tailwind
-
-	•	No AR framework needed — pure CSS/canvas overlay on video stream
-
-	•	Fetch from Overpass API and Wikipedia REST API directly (no backend needed)
-
-	•	All positioning math done in the browser using bearing calculations (haversine formula for distance, atan2 for bearing)
-
-Out of Scope for MVP
-
-	•	No user accounts
-
-	•	No 3D building models
-
-	•	No indoor positioning
-
-	•	No historical/cultural filters
-
-That prompt gives Lovable enough architectural specificity to not hallucinate the data layer, while leaving the visual execution open for it to run with. The Overpass + Wikipedia combo is fully free, no API keys needed, which keeps the prototype self-contained.
-
-Want me to also write the bearing/projection math as a standalone JS snippet you can drop in if Lovable gets that part wrong?
-
-This project was built with [Lovable](https://lovable.dev).
-
-**Live app**: https://skyline-sight-seer.lovable.app
-
-## Build with Lovable
-
-Continue developing this project in the [Lovable editor](https://lovable.dev/projects/a0295c6a-967c-4f93-8bf1-92aace6e3536).
-
-- **Ship faster**: describe what you want to build and Lovable handles the code.
-- **Stay in sync**: every change made in Lovable is committed straight to this repository.
-- **Full ownership**: this code is yours. Push to `main` on GitHub and your changes sync back into Lovable, ready for your next prompt.
-
-## Development
-
-Prefer working locally? You need Node.js and npm — [install with nvm](https://github.com/nvm-sh/nvm#installing-and-updating).
+You need [Bun](https://bun.sh) or Node.js 20+.
 
 ```sh
 git clone <this-repository-url>
 cd <repository-name>
-npm i
-npm run dev
+bun install
+cp .env.example .env   # optional: no variables are currently required
+bun run dev
 ```
+
+Then open the local URL that Vite prints. Camera and motion sensors only work in a secure context (HTTPS or `localhost`). To test on a real phone, use a tunnel or deploy a preview build.
+
+| Command | Purpose |
+| --- | --- |
+| `bun run dev` | Start the dev server |
+| `bun run build` | Production build |
+| `bun run preview` | Preview the production build |
+| `bun run lint` | Lint with ESLint |
+| `bun run format` | Format with Prettier |
+
+## Roadmap
+
+- **Shared corrections.** Sync user corrections to a shared store so everyone's labels get more accurate over time.
+- **Image-assisted matching.** Use on-device vision to match labels to the building outlines the camera actually sees, not just compass bearing.
+- **Map pack manager.** Let users see, pre-download and delete area packs for trips.
+- **Snapshot sharing.** Capture the camera view with its labels as an image to share.
+
+## Data & Attribution
+
+Building data © [OpenStreetMap contributors](https://www.openstreetmap.org/copyright), ODbL. Descriptions come from Wikidata (CC0) and Wikipedia (CC BY-SA). Declination data comes from NOAA NCEI.
