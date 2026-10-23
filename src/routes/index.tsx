@@ -36,6 +36,16 @@ const EYE_OFFSET_M = 1.6;
 const FLOOR_STORAGE_KEY = "skyline.viewer.floor";
 
 export const Route = createFileRoute("/")({
+  head: () => ({
+    meta: [
+      { title: "SkylineAR — Identify Your City Skyline" },
+      { name: "description", content: "Identify city buildings with a live camera skyline view, location-based labels, and building information." },
+      { property: "og:title", content: "SkylineAR — Identify Your City Skyline" },
+      { property: "og:description", content: "Explore the buildings around you with SkylineAR's live camera skyline view and location-based labels." },
+      { property: "og:type", content: "website" },
+      { name: "twitter:card", content: "summary" },
+    ],
+  }),
   component: SkylineARPage,
 });
 
